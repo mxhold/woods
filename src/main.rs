@@ -56,22 +56,26 @@ fn sprite_system(
 
 fn keyboard_movement(keyboard_input: Res<Input<KeyCode>>, mut query: Query<(&Player, &mut Transform, &mut Direction, &mut WalkAnimation)>) {
     for (_, mut transform, mut direction, mut walk_animation) in query.iter_mut() {
-        if keyboard_input.just_pressed(KeyCode::Right) {
+        if walk_animation.stage != WalkStage::Stop {
+            continue;
+        }
+        
+        if keyboard_input.pressed(KeyCode::Right) {
             transform.translation.x += STEP_DIST;
             *direction = Direction::East;
             *walk_animation = WalkAnimation::new(WalkStage::Step1)
         }
-        if keyboard_input.just_pressed(KeyCode::Left) {
+        if keyboard_input.pressed(KeyCode::Left) {
             transform.translation.x -= STEP_DIST;
             *direction = Direction::West;
             *walk_animation = WalkAnimation::new(WalkStage::Step1)
         }
-        if keyboard_input.just_pressed(KeyCode::Up) {
+        if keyboard_input.pressed(KeyCode::Up) {
             transform.translation.y += STEP_DIST;
             *direction = Direction::North;
             *walk_animation = WalkAnimation::new(WalkStage::Step1)
         }
-        if keyboard_input.just_pressed(KeyCode::Down) {
+        if keyboard_input.pressed(KeyCode::Down) {
             transform.translation.y -= STEP_DIST;
             *direction = Direction::South;
             *walk_animation = WalkAnimation::new(WalkStage::Step1)
@@ -160,13 +164,10 @@ fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    mut windows: ResMut<Windows>,
 ) {
     let texture_handle = asset_server.load("player.png");
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(19.0, 38.0), 24, 1);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
-    let window = windows.get_primary_mut().unwrap();
-    window.set_scale_factor_override(Some(window.scale_factor() * 2.));
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands
         .spawn_bundle(SpriteSheetBundle {
