@@ -4,7 +4,7 @@ use bevy::{input::{ElementState, keyboard::KeyboardInput}, prelude::*};
 const TILE_SIZE: f32 = 20.0;
 const STEP_DIST: f32 = TILE_SIZE / 3.0;
 
-const WALK_DURATION: Duration = Duration::from_millis(300/3);
+const WALK_DURATION: Duration = Duration::from_millis(200/3);
 
 fn main() {
     App::build()
@@ -17,11 +17,11 @@ fn main() {
     .add_plugins(DefaultPlugins)
     .add_startup_system(setup.system())
     .add_system(keyboard_movement.system())
-    .add_system(sprite_system.system())
+    .add_system(walk_animation.system())
     .run();
 }
 
-fn sprite_system(
+fn walk_animation(
     time: Res<Time>,
     mut query: Query<(&mut TextureAtlasSprite, &Direction, &mut WalkAnimation, &mut Transform)>,
 ) {
@@ -43,26 +43,32 @@ fn sprite_system(
 
 fn keyboard_movement(mut keyboard_input_events: EventReader<KeyboardInput>, mut query: Query<(&Player, &mut Transform, &mut Direction, &mut WalkAnimation)>) {
     for event in keyboard_input_events.iter() {
-        if event.state == ElementState::Pressed {
-            if let Some(key_code) = event.key_code {
-                let result: Result<Direction, _> = key_code.try_into();
-                if let Ok(to_direction) = result {
-                    for (_, mut transform, mut direction, mut walk_animation) in query.iter_mut() {
-                        if to_direction == *direction {
-                            if walk_animation.stage != WalkStage::Stop {
-                                continue;
-                            }
+        if event.state != ElementState::Pressed {
+            continue;
+        }
 
-                            to_direction.translate(&mut transform.translation);
-                            *walk_animation = WalkAnimation::new(WalkStage::Step1)
-                        } else {
-                            // Don't move if just changing directions
-                            *direction = to_direction;
-                        }
-                    }
+        if let Some(key_code) = event.key_code {
+            if let Ok(to_direction) = key_code.try_into() {
+                for (_, transform, direction, walk_animation) in query.iter_mut() {
+                    // are ya ready, boots?
+                    start_walking(to_direction, direction, walk_animation, transform);
                 }
             }
         }
+    }
+}
+
+fn start_walking(to_direction: Direction, mut direction: Mut<Direction>, mut walk_animation: Mut<WalkAnimation>, mut transform: Mut<Transform>) {
+    if walk_animation.stage != WalkStage::Stop {
+        return;
+    }
+
+    if to_direction == *direction {
+        to_direction.translate(&mut transform.translation);
+        *walk_animation = WalkAnimation::new(WalkStage::Step1);
+    } else {
+        // Don't move if just changing directions
+        *direction = to_direction;
     }
 }
 
