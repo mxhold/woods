@@ -1,5 +1,5 @@
 use std::{convert::{TryFrom, TryInto}, time::Duration};
-use bevy::prelude::*;
+use bevy::{input::{ElementState, keyboard::KeyboardInput}, prelude::*};
 
 const TILE_SIZE: f32 = 20.0;
 const STEP_DIST: f32 = TILE_SIZE / 3.0;
@@ -41,18 +41,26 @@ fn sprite_system(
     }
 }
 
-fn keyboard_movement(keyboard_input: Res<Input<KeyCode>>, mut query: Query<(&Player, &mut Transform, &mut Direction, &mut WalkAnimation)>) {
-    for (_, mut transform, mut direction, mut walk_animation) in query.iter_mut() {
-        if walk_animation.stage != WalkStage::Stop {
-            continue;
-        }
+fn keyboard_movement(mut keyboard_input_events: EventReader<KeyboardInput>, mut query: Query<(&Player, &mut Transform, &mut Direction, &mut WalkAnimation)>) {
+    for event in keyboard_input_events.iter() {
+        if event.state == ElementState::Pressed {
+            if let Some(key_code) = event.key_code {
+                let result: Result<Direction, _> = key_code.try_into();
+                if let Ok(to_direction) = result {
+                    for (_, mut transform, mut direction, mut walk_animation) in query.iter_mut() {
+                        if to_direction == *direction {
+                            if walk_animation.stage != WalkStage::Stop {
+                                continue;
+                            }
 
-        if let Some(key_code) = keyboard_input.get_pressed().next() {
-            let result: Result<Direction, _> = (*key_code).try_into();
-            if let Ok(to_direction) = result {
-                to_direction.translate(&mut transform.translation);
-                *direction = to_direction;
-                *walk_animation = WalkAnimation::new(WalkStage::Step1)
+                            to_direction.translate(&mut transform.translation);
+                            *walk_animation = WalkAnimation::new(WalkStage::Step1)
+                        } else {
+                            // Don't move if just changing directions
+                            *direction = to_direction;
+                        }
+                    }
+                }
             }
         }
     }
@@ -60,7 +68,7 @@ fn keyboard_movement(keyboard_input: Res<Input<KeyCode>>, mut query: Query<(&Pla
 
 struct Player;
 
-#[derive(Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
 enum Direction {
     North,
     South,
