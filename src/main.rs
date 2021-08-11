@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{convert::{TryFrom, TryInto}, time::Duration};
 use bevy::prelude::*;
 
 const TILE_SIZE: f32 = 20.0;
@@ -35,20 +35,7 @@ fn sprite_system(
         walk_animation.timer.tick(time.delta());
 
         if walk_animation.timer.finished() {
-            match direction {
-                Direction::East => {
-                    transform.translation.x += STEP_DIST;
-                }
-                Direction::West => {
-                    transform.translation.x -= STEP_DIST;
-                }
-                Direction::North => {
-                    transform.translation.y += STEP_DIST;
-                }
-                Direction::South => {
-                    transform.translation.y -= STEP_DIST;
-                }
-            }
+            direction.translate(&mut transform.translation);
             walk_animation.next();
         }
     }
@@ -59,26 +46,14 @@ fn keyboard_movement(keyboard_input: Res<Input<KeyCode>>, mut query: Query<(&Pla
         if walk_animation.stage != WalkStage::Stop {
             continue;
         }
-        
-        if keyboard_input.pressed(KeyCode::Right) {
-            transform.translation.x += STEP_DIST;
-            *direction = Direction::East;
-            *walk_animation = WalkAnimation::new(WalkStage::Step1)
-        }
-        if keyboard_input.pressed(KeyCode::Left) {
-            transform.translation.x -= STEP_DIST;
-            *direction = Direction::West;
-            *walk_animation = WalkAnimation::new(WalkStage::Step1)
-        }
-        if keyboard_input.pressed(KeyCode::Up) {
-            transform.translation.y += STEP_DIST;
-            *direction = Direction::North;
-            *walk_animation = WalkAnimation::new(WalkStage::Step1)
-        }
-        if keyboard_input.pressed(KeyCode::Down) {
-            transform.translation.y -= STEP_DIST;
-            *direction = Direction::South;
-            *walk_animation = WalkAnimation::new(WalkStage::Step1)
+
+        if let Some(key_code) = keyboard_input.get_pressed().next() {
+            let result: Result<Direction, _> = (*key_code).try_into();
+            if let Ok(to_direction) = result {
+                to_direction.translate(&mut transform.translation);
+                *direction = to_direction;
+                *walk_animation = WalkAnimation::new(WalkStage::Step1)
+            }
         }
     }
 }
@@ -93,6 +68,20 @@ enum Direction {
     West
 }
 
+impl TryFrom<KeyCode> for Direction {
+    type Error = &'static str;
+
+    fn try_from(key_code: KeyCode) -> Result<Self, Self::Error> {
+        match key_code {
+            KeyCode::Right => Ok(Direction::East),
+            KeyCode::Left => Ok(Direction::West),
+            KeyCode::Up => Ok(Direction::North),
+            KeyCode::Down => Ok(Direction::South),
+            _ => Err("Not a direction key")
+        }
+    }
+}
+
 impl Direction {
     pub fn sprite_offset(&self, frames_per_direction: u32) -> u32 {
         match self {
@@ -100,6 +89,23 @@ impl Direction {
             Direction::South => frames_per_direction * 1,
             Direction::East => frames_per_direction * 2,
             Direction::West => frames_per_direction * 3,
+        }
+    }
+
+    pub fn translate(&self, translation: &mut Vec3) {
+        match self {
+            Direction::East => {
+                translation.x += STEP_DIST;
+            }
+            Direction::West => {
+                translation.x -= STEP_DIST;
+            }
+            Direction::North => {
+                translation.y += STEP_DIST;
+            }
+            Direction::South => {
+                translation.y -= STEP_DIST;
+            }
         }
     }
 }
