@@ -1,29 +1,40 @@
-use std::{convert::{TryFrom, TryInto}, time::Duration};
-use bevy::{input::{ElementState, keyboard::KeyboardInput}, prelude::*};
+use bevy::{
+    input::{keyboard::KeyboardInput, ElementState},
+    prelude::*,
+};
+use std::{
+    convert::{TryFrom, TryInto},
+    time::Duration,
+};
 
 const TILE_SIZE: f32 = 20.0;
 const STEP_DIST: f32 = TILE_SIZE / 3.0;
 
-const WALK_DURATION: Duration = Duration::from_millis(200/3);
+const WALK_DURATION: Duration = Duration::from_millis(300 / 3);
 
 fn main() {
     App::build()
-    .insert_resource(WindowDescriptor {
-        title: "Woods".to_string(),
-        width: 400.,
-        height: 300.,
-        ..Default::default()
-    })
-    .add_plugins(DefaultPlugins)
-    .add_startup_system(setup.system())
-    .add_system(keyboard_movement.system())
-    .add_system(walk_animation.system())
-    .run();
+        .insert_resource(WindowDescriptor {
+            title: "Woods".to_string(),
+            width: 400.0,
+            height: 300.0,
+            ..Default::default()
+        })
+        .add_plugins(DefaultPlugins)
+        .add_startup_system(setup.system())
+        .add_system(keyboard_movement.system())
+        .add_system(walk_animation.system())
+        .run();
 }
 
 fn walk_animation(
     time: Res<Time>,
-    mut query: Query<(&mut TextureAtlasSprite, &Direction, &mut WalkAnimation, &mut Transform)>,
+    mut query: Query<(
+        &mut TextureAtlasSprite,
+        &Direction,
+        &mut WalkAnimation,
+        &mut Transform,
+    )>,
 ) {
     for (mut sprite, direction, mut walk_animation, mut transform) in query.iter_mut() {
         sprite.index = walk_animation.stage.sprite_index() + direction.sprite_offset(6);
@@ -41,16 +52,17 @@ fn walk_animation(
     }
 }
 
-fn keyboard_movement(mut keyboard_input_events: EventReader<KeyboardInput>, mut query: Query<(&Player, &mut Transform, &mut Direction, &mut WalkAnimation)>) {
-    for event in keyboard_input_events.iter() {
-        if event.state != ElementState::Pressed {
-            continue;
-        }
-
+fn keyboard_movement(
+    mut keyboard_input_events: EventReader<KeyboardInput>,
+    mut query: Query<(&Player, &mut Transform, &mut Direction, &mut WalkAnimation)>,
+) {
+    for event in keyboard_input_events
+        .iter()
+        .filter(|e| e.state == ElementState::Pressed)
+    {
         if let Some(key_code) = event.key_code {
             if let Ok(to_direction) = key_code.try_into() {
                 for (_, transform, direction, walk_animation) in query.iter_mut() {
-                    // are ya ready, boots?
                     start_walking(to_direction, direction, walk_animation, transform);
                 }
             }
@@ -58,7 +70,12 @@ fn keyboard_movement(mut keyboard_input_events: EventReader<KeyboardInput>, mut 
     }
 }
 
-fn start_walking(to_direction: Direction, mut direction: Mut<Direction>, mut walk_animation: Mut<WalkAnimation>, mut transform: Mut<Transform>) {
+fn start_walking(
+    to_direction: Direction,
+    mut direction: Mut<Direction>,
+    mut walk_animation: Mut<WalkAnimation>,
+    mut transform: Mut<Transform>,
+) {
     if walk_animation.stage != WalkStage::Stop {
         return;
     }
@@ -79,7 +96,7 @@ enum Direction {
     North,
     South,
     East,
-    West
+    West,
 }
 
 impl TryFrom<KeyCode> for Direction {
@@ -91,7 +108,7 @@ impl TryFrom<KeyCode> for Direction {
             KeyCode::Left => Ok(Direction::West),
             KeyCode::Up => Ok(Direction::North),
             KeyCode::Down => Ok(Direction::South),
-            _ => Err("Not a direction key")
+            _ => Err("Not a direction key"),
         }
     }
 }
@@ -129,7 +146,7 @@ enum WalkStage {
     Stop,
     Step1,
     Pause,
-    Step2
+    Step2,
 }
 
 impl WalkStage {
@@ -142,7 +159,6 @@ impl WalkStage {
         }
     }
 
-
     pub fn sprite_index(&self) -> u32 {
         match self {
             WalkStage::Step1 => 0,
@@ -154,8 +170,8 @@ impl WalkStage {
 }
 
 struct WalkAnimation {
-    pub stage: WalkStage,
-    pub timer: Timer
+    stage: WalkStage,
+    timer: Timer,
 }
 
 impl WalkAnimation {
@@ -169,7 +185,7 @@ impl WalkAnimation {
     pub fn new(stage: WalkStage) -> Self {
         Self {
             stage: stage,
-            timer: Timer::new(WALK_DURATION, false)
+            timer: Timer::new(WALK_DURATION, false),
         }
     }
 }
@@ -198,4 +214,4 @@ fn setup(
         .insert(Player)
         .insert(Direction::South)
         .insert(WalkAnimation::default());
-    }
+}
