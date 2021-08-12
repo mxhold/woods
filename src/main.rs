@@ -2,15 +2,13 @@ use bevy::{
     input::{keyboard::KeyboardInput, ElementState},
     prelude::*,
 };
-use std::{
-    convert::{TryFrom, TryInto},
-    time::Duration,
-};
+use std::convert::TryInto;
 
-const TILE_SIZE: f32 = 20.0;
-const STEP_DIST: f32 = TILE_SIZE / 3.0;
+use direction::Direction;
+use walk_animation::WalkAnimation;
 
-const WALK_DURATION: Duration = Duration::from_millis(300 / 3);
+mod direction;
+mod walk_animation;
 
 fn main() {
     App::build()
@@ -25,31 +23,6 @@ fn main() {
         .add_system(keyboard_movement.system())
         .add_system(walk_animation.system())
         .run();
-}
-
-fn walk_animation(
-    time: Res<Time>,
-    mut query: Query<(
-        &mut TextureAtlasSprite,
-        &Direction,
-        &mut WalkAnimation,
-        &mut Transform,
-    )>,
-) {
-    for (mut sprite, direction, mut walk_animation, mut transform) in query.iter_mut() {
-        sprite.index = walk_animation.stage.sprite_index() + direction.sprite_offset(6);
-
-        if walk_animation.stage == WalkStage::Stop {
-            continue;
-        }
-
-        walk_animation.timer.tick(time.delta());
-
-        if walk_animation.timer.finished() {
-            direction.translate(&mut transform.translation);
-            walk_animation.next();
-        }
-    }
 }
 
 fn keyboard_movement(
@@ -76,125 +49,38 @@ fn start_walking(
     mut walk_animation: Mut<WalkAnimation>,
     mut transform: Mut<Transform>,
 ) {
-    if walk_animation.stage != WalkStage::Stop {
+    if walk_animation.running() {
         return;
     }
 
     if to_direction == *direction {
         to_direction.translate(&mut transform.translation);
-        *walk_animation = WalkAnimation::new(WalkStage::Step1);
+        *walk_animation = WalkAnimation::new();
     } else {
         // Don't move if just changing directions
         *direction = to_direction;
     }
 }
 
+fn walk_animation(
+    time: Res<Time>,
+    mut query: Query<(
+        &mut TextureAtlasSprite,
+        &Direction,
+        &mut WalkAnimation,
+        &mut Transform,
+    )>,
+) {
+    for (mut sprite, direction, mut walk_animation, mut transform) in query.iter_mut() {
+        sprite.index = walk_animation.sprite_index_offset() + direction.sprite_index_offset();
+
+        if walk_animation.stage_finished(time.delta()) {
+            direction.translate(&mut transform.translation);
+        }
+    }
+}
+
 struct Player;
-
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
-enum Direction {
-    North,
-    South,
-    East,
-    West,
-}
-
-impl TryFrom<KeyCode> for Direction {
-    type Error = &'static str;
-
-    fn try_from(key_code: KeyCode) -> Result<Self, Self::Error> {
-        match key_code {
-            KeyCode::Right => Ok(Direction::East),
-            KeyCode::Left => Ok(Direction::West),
-            KeyCode::Up => Ok(Direction::North),
-            KeyCode::Down => Ok(Direction::South),
-            _ => Err("Not a direction key"),
-        }
-    }
-}
-
-impl Direction {
-    pub fn sprite_offset(&self, frames_per_direction: u32) -> u32 {
-        match self {
-            Direction::North => frames_per_direction * 0,
-            Direction::South => frames_per_direction * 1,
-            Direction::East => frames_per_direction * 2,
-            Direction::West => frames_per_direction * 3,
-        }
-    }
-
-    pub fn translate(&self, translation: &mut Vec3) {
-        match self {
-            Direction::East => {
-                translation.x += STEP_DIST;
-            }
-            Direction::West => {
-                translation.x -= STEP_DIST;
-            }
-            Direction::North => {
-                translation.y += STEP_DIST;
-            }
-            Direction::South => {
-                translation.y -= STEP_DIST;
-            }
-        }
-    }
-}
-
-#[derive(PartialEq, Eq, Copy, Clone)]
-enum WalkStage {
-    Stop,
-    Step1,
-    Pause,
-    Step2,
-}
-
-impl WalkStage {
-    pub fn next(&self) -> Self {
-        match self {
-            WalkStage::Step1 => WalkStage::Pause,
-            WalkStage::Pause => WalkStage::Step2,
-            WalkStage::Step2 => WalkStage::Stop,
-            WalkStage::Stop => WalkStage::Stop,
-        }
-    }
-
-    pub fn sprite_index(&self) -> u32 {
-        match self {
-            WalkStage::Step1 => 0,
-            WalkStage::Pause => 1,
-            WalkStage::Step2 => 2,
-            WalkStage::Stop => 1,
-        }
-    }
-}
-
-struct WalkAnimation {
-    stage: WalkStage,
-    timer: Timer,
-}
-
-impl WalkAnimation {
-    pub fn next(&mut self) {
-        self.stage = self.stage.next();
-        if self.stage != WalkStage::Stop {
-            self.timer = Timer::new(WALK_DURATION, false)
-        }
-    }
-
-    pub fn new(stage: WalkStage) -> Self {
-        Self {
-            stage: stage,
-            timer: Timer::new(WALK_DURATION, false),
-        }
-    }
-}
-
-impl Default for WalkAnimation {
-    fn default() -> Self {
-        WalkAnimation::new(WalkStage::Stop)
-    }
-}
 
 fn setup(
     mut commands: Commands,
