@@ -2,9 +2,11 @@ use bevy::{
     input::{keyboard::KeyboardInput, ElementState},
     prelude::*,
 };
-use bevy_networking_turbulence::{ConnectionChannelsBuilder, MessageChannelMode, MessageChannelSettings, NetworkEvent, NetworkResource, NetworkingPlugin, ReliableChannelSettings};
-use std::{convert::TryInto, net::SocketAddr, time::Duration};
+use bevy_networking_turbulence::{
+    ConnectionChannelsBuilder, NetworkEvent, NetworkResource, NetworkingPlugin,
+};
 use serde::{Deserialize, Serialize};
+use std::{convert::TryInto, net::SocketAddr};
 
 use direction::Direction;
 use walk_animation::WalkAnimation;
@@ -12,7 +14,7 @@ use walk_animation::WalkAnimation;
 mod direction;
 mod walk_animation;
 
-const SERVER_PORT: u16 = 14192;
+use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, SERVER_MESSAGE_SETTINGS, SERVER_PORT};
 
 fn main() {
     App::build()
@@ -135,59 +137,25 @@ fn network_setup(mut net: ResMut<NetworkResource>) {
             .register::<ClientMessage>(CLIENT_STATE_MESSAGE_SETTINGS)
             .unwrap();
         builder
-            .register::<ServerMessage>(GAME_STATE_MESSAGE_SETTINGS)
+            .register::<ServerMessage>(SERVER_MESSAGE_SETTINGS)
             .unwrap();
     });
 }
 
-const CLIENT_STATE_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettings {
-    channel: 0,
-    channel_mode: MessageChannelMode::Reliable {
-        reliability_settings: ReliableChannelSettings {
-            bandwidth: 4096,
-            recv_window_size: 1024,
-            send_window_size: 1024,
-            burst_bandwidth: 1024,
-            init_send: 512,
-            wakeup_time: Duration::from_millis(100),
-            initial_rtt: Duration::from_millis(200),
-            max_rtt: Duration::from_secs(2),
-            rtt_update_factor: 0.1,
-            rtt_resend_factor: 1.5,
-        },
-        max_message_len: 1024,
-    },
-    message_buffer_size: 8,
-    packet_buffer_size: 8,
-};
-
-const GAME_STATE_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettings {
-    channel: 1,
-    channel_mode: MessageChannelMode::Unreliable,
-    message_buffer_size: 8,
-    packet_buffer_size: 8,
-};
-
-fn handle_messages_client(
-    mut net: ResMut<NetworkResource>,
-) {
+fn handle_messages_client(mut net: ResMut<NetworkResource>) {
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
 
         while let Some(server_message) = channels.recv::<ServerMessage>() {
             println!(
                 "ServerMessage received on [{}]: {:?}",
-                handle,
-                server_message
+                handle, server_message
             );
         }
     }
 }
 
-fn handle_packets(
-    mut net: ResMut<NetworkResource>,
-    mut network_events: EventReader<NetworkEvent>,
-) {
+fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventReader<NetworkEvent>) {
     for event in network_events.iter() {
         match event {
             NetworkEvent::Connected(handle) => match net.connections.get_mut(handle) {
@@ -196,8 +164,7 @@ fn handle_packets(
                         Some(remote_address) => {
                             println!(
                                 "Incoming connection on [{}] from [{}]",
-                                handle,
-                                remote_address
+                                handle, remote_address
                             );
                         }
                         None => {

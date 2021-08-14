@@ -3758,6 +3758,14 @@ dependencies = [
  "bevy",
  "bevy_networking_turbulence",
  "serde",
+ "woods-common",
+]
+
+[[package]]
+name = "woods-common"
+version = "0.1.0"
+dependencies = [
+ "bevy_networking_turbulence",
 ]
 
 [[package]]
