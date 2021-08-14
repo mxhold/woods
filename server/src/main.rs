@@ -5,9 +5,8 @@ use bevy_networking_turbulence::{
     ConnectionChannelsBuilder, NetworkEvent,
     NetworkResource, NetworkingPlugin,
 };
-use serde::{Deserialize, Serialize};
 use simple_logger::SimpleLogger;
-use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, SERVER_MESSAGE_SETTINGS, SERVER_PORT};
+use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, ClientMessage, SERVER_MESSAGE_SETTINGS, SERVER_PORT, ServerMessage};
 
 fn main() {
     SimpleLogger::new()
@@ -44,16 +43,6 @@ fn network_setup(mut net: ResMut<NetworkResource>) {
             .register::<ServerMessage>(SERVER_MESSAGE_SETTINGS)
             .unwrap();
     });
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-enum ClientMessage {
-    Hello(String),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-enum ServerMessage {
-    Welcome(String),
 }
 
 fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventReader<NetworkEvent>) {

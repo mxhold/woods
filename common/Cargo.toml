@@ -5,3 +5,4 @@ edition = "2018"
 
 [dependencies]
 bevy_networking_turbulence = { version = "0.3.3" }
+serde = { version = "1.0", features = ["derive"] }

@@ -1,4 +1,6 @@
 use std::time::Duration;
+use serde::{Deserialize, Serialize};
+
 use bevy_networking_turbulence::{MessageChannelMode, MessageChannelSettings, ReliableChannelSettings};
 
 pub const SERVER_PORT: u16 = 14192;
@@ -30,3 +32,13 @@ pub const SERVER_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettin
   message_buffer_size: 8,
   packet_buffer_size: 8,
 };
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ClientMessage {
+    Hello(String),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ServerMessage {
+    Welcome(String),
+}

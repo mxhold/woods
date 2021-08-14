@@ -5,7 +5,6 @@ use bevy::{
 use bevy_networking_turbulence::{
     ConnectionChannelsBuilder, NetworkEvent, NetworkResource, NetworkingPlugin,
 };
-use serde::{Deserialize, Serialize};
 use std::{convert::TryInto, net::SocketAddr};
 
 use direction::Direction;
@@ -14,7 +13,7 @@ use walk_animation::WalkAnimation;
 mod direction;
 mod walk_animation;
 
-use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, SERVER_MESSAGE_SETTINGS, SERVER_PORT};
+use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, ClientMessage, SERVER_MESSAGE_SETTINGS, SERVER_PORT, ServerMessage};
 
 fn main() {
     App::build()
@@ -119,16 +118,6 @@ fn connect(mut net: ResMut<NetworkResource>) {
     let socket_address = SocketAddr::new(ip_address, SERVER_PORT);
     println!("Starting client");
     net.connect(socket_address);
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-enum ClientMessage {
-    Hello(String),
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-enum ServerMessage {
-    Welcome(String),
 }
 
 fn network_setup(mut net: ResMut<NetworkResource>) {

@@ -1913,6 +1913,7 @@ name = "woods-common"
 version = "0.1.0"
 dependencies = [
  "bevy_networking_turbulence",
+ "serde",
 ]
 
 [[package]]
@@ -1922,7 +1923,6 @@ dependencies = [
  "bevy",
  "bevy_networking_turbulence",
  "log",
- "serde",
  "simple_logger",
  "woods-common",
 ]
