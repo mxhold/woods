@@ -3432,7 +3432,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "woods"
+name = "woods-server"
 version = "0.1.0"
 dependencies = [
  "bevy",
