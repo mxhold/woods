@@ -5,6 +5,8 @@ use bevy::{
 use bevy_networking_turbulence::{
     ConnectionChannelsBuilder, NetworkEvent, NetworkResource, NetworkingPlugin,
 };
+use log::LevelFilter;
+use simple_logger::SimpleLogger;
 use std::{convert::TryInto, net::SocketAddr};
 
 use direction::Direction;
@@ -13,9 +15,18 @@ use walk_animation::WalkAnimation;
 mod direction;
 mod walk_animation;
 
-use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, ClientMessage, SERVER_MESSAGE_SETTINGS, SERVER_PORT, ServerMessage};
+use woods_common::{
+    ClientMessage, ServerMessage, CLIENT_STATE_MESSAGE_SETTINGS, SERVER_MESSAGE_SETTINGS,
+    SERVER_PORT,
+};
 
 fn main() {
+    SimpleLogger::new()
+        .with_level(LevelFilter::Off)
+        .with_module_level("woods_client", LevelFilter::Trace)
+        .init()
+        .unwrap();
+
     App::build()
         .insert_resource(WindowDescriptor {
             title: "Woods".to_string(),
@@ -116,7 +127,7 @@ fn connect(mut net: ResMut<NetworkResource>) {
     let ip_address =
         bevy_networking_turbulence::find_my_ip_address().expect("can't find ip address");
     let socket_address = SocketAddr::new(ip_address, SERVER_PORT);
-    println!("Starting client");
+    log::info!("Starting client");
     net.connect(socket_address);
 }
 
@@ -136,9 +147,10 @@ fn handle_messages_client(mut net: ResMut<NetworkResource>) {
         let channels = connection.channels().unwrap();
 
         while let Some(server_message) = channels.recv::<ServerMessage>() {
-            println!(
+            log::debug!(
                 "ServerMessage received on [{}]: {:?}",
-                handle, server_message
+                handle,
+                server_message
             );
         }
     }
@@ -151,26 +163,27 @@ fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventRea
                 Some(connection) => {
                     match connection.remote_address() {
                         Some(remote_address) => {
-                            println!(
+                            log::info!(
                                 "Incoming connection on [{}] from [{}]",
-                                handle, remote_address
+                                handle,
+                                remote_address
                             );
                         }
                         None => {
-                            println!("Connected on [{}]", handle);
+                            log::info!("Connected on [{}]", handle);
                         }
                     }
 
-                    println!("Sending Hello on [{}]", handle);
+                    log::info!("Sending Hello on [{}]", handle);
                     match net.send_message(*handle, ClientMessage::Hello("test".to_string())) {
                         Ok(msg) => match msg {
                             Some(msg) => {
-                                println!("Unable to send Hello: {:?}", msg);
+                                log::error!("Unable to send Hello: {:?}", msg);
                             }
                             None => {}
                         },
                         Err(err) => {
-                            println!("Unable to send Hello: {:?}", err);
+                            log::error!("Unable to send Hello: {:?}", err);
                         }
                     };
                 }
