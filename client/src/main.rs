@@ -2,13 +2,17 @@ use bevy::{
     input::{keyboard::KeyboardInput, ElementState},
     prelude::*,
 };
-use std::convert::TryInto;
+use bevy_networking_turbulence::{ConnectionChannelsBuilder, MessageChannelMode, MessageChannelSettings, NetworkEvent, NetworkResource, NetworkingPlugin, ReliableChannelSettings};
+use std::{convert::TryInto, net::SocketAddr, time::Duration};
+use serde::{Deserialize, Serialize};
 
 use direction::Direction;
 use walk_animation::WalkAnimation;
 
 mod direction;
 mod walk_animation;
+
+const SERVER_PORT: u16 = 14192;
 
 fn main() {
     App::build()
@@ -19,9 +23,14 @@ fn main() {
             ..Default::default()
         })
         .add_plugins(DefaultPlugins)
-        .add_startup_system(setup.system())
+        .add_plugin(NetworkingPlugin::default())
+        .add_startup_system(setup_player.system())
+        .add_startup_system(connect.system())
+        .add_startup_system(network_setup.system())
         .add_system(keyboard_movement.system())
         .add_system(walk_animation.system())
+        .add_system(handle_packets.system())
+        .add_system_to_stage(CoreStage::PreUpdate, handle_messages_client.system())
         .run();
 }
 
@@ -82,7 +91,7 @@ fn walk_animation(
 
 struct Player;
 
-fn setup(
+fn setup_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
@@ -100,4 +109,118 @@ fn setup(
         .insert(Player)
         .insert(Direction::South)
         .insert(WalkAnimation::default());
+}
+
+fn connect(mut net: ResMut<NetworkResource>) {
+    let ip_address =
+        bevy_networking_turbulence::find_my_ip_address().expect("can't find ip address");
+    let socket_address = SocketAddr::new(ip_address, SERVER_PORT);
+    println!("Starting client");
+    net.connect(socket_address);
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+enum ClientMessage {
+    Hello(String),
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+enum ServerMessage {
+    Welcome(String),
+}
+
+fn network_setup(mut net: ResMut<NetworkResource>) {
+    net.set_channels_builder(|builder: &mut ConnectionChannelsBuilder| {
+        builder
+            .register::<ClientMessage>(CLIENT_STATE_MESSAGE_SETTINGS)
+            .unwrap();
+        builder
+            .register::<ServerMessage>(GAME_STATE_MESSAGE_SETTINGS)
+            .unwrap();
+    });
+}
+
+const CLIENT_STATE_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettings {
+    channel: 0,
+    channel_mode: MessageChannelMode::Reliable {
+        reliability_settings: ReliableChannelSettings {
+            bandwidth: 4096,
+            recv_window_size: 1024,
+            send_window_size: 1024,
+            burst_bandwidth: 1024,
+            init_send: 512,
+            wakeup_time: Duration::from_millis(100),
+            initial_rtt: Duration::from_millis(200),
+            max_rtt: Duration::from_secs(2),
+            rtt_update_factor: 0.1,
+            rtt_resend_factor: 1.5,
+        },
+        max_message_len: 1024,
+    },
+    message_buffer_size: 8,
+    packet_buffer_size: 8,
+};
+
+const GAME_STATE_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettings {
+    channel: 1,
+    channel_mode: MessageChannelMode::Unreliable,
+    message_buffer_size: 8,
+    packet_buffer_size: 8,
+};
+
+fn handle_messages_client(
+    mut net: ResMut<NetworkResource>,
+) {
+    for (handle, connection) in net.connections.iter_mut() {
+        let channels = connection.channels().unwrap();
+
+        while let Some(server_message) = channels.recv::<ServerMessage>() {
+            println!(
+                "ServerMessage received on [{}]: {:?}",
+                handle,
+                server_message
+            );
+        }
+    }
+}
+
+fn handle_packets(
+    mut net: ResMut<NetworkResource>,
+    mut network_events: EventReader<NetworkEvent>,
+) {
+    for event in network_events.iter() {
+        match event {
+            NetworkEvent::Connected(handle) => match net.connections.get_mut(handle) {
+                Some(connection) => {
+                    match connection.remote_address() {
+                        Some(remote_address) => {
+                            println!(
+                                "Incoming connection on [{}] from [{}]",
+                                handle,
+                                remote_address
+                            );
+                        }
+                        None => {
+                            println!("Connected on [{}]", handle);
+                        }
+                    }
+
+                    println!("Sending Hello on [{}]", handle);
+                    match net.send_message(*handle, ClientMessage::Hello("test".to_string())) {
+                        Ok(msg) => match msg {
+                            Some(msg) => {
+                                println!("Unable to send Hello: {:?}", msg);
+                            }
+                            None => {}
+                        },
+                        Err(err) => {
+                            println!("Unable to send Hello: {:?}", err);
+                        }
+                    };
+                }
+                None => panic!("Got packet for non-existing connection [{}]", handle),
+            },
+            _ => {}
+        }
+    }
 }

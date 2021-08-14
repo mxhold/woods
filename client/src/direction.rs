@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{math::Vec3, prelude::*};
 use std::convert::TryFrom;
 
 const TILE_SIZE: f32 = 20.0;
