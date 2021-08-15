@@ -33,12 +33,30 @@ pub const SERVER_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettin
   packet_buffer_size: 8,
 };
 
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub enum Direction {
+    North,
+    South,
+    East,
+    West,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone,  Eq, PartialEq)]
+pub struct PlayerId(pub u32);
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
+pub struct Position {
+  pub x: u16,
+  pub y: u16
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientMessage {
-    Hello(String),
+    Move(Position),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ServerMessage {
-    Welcome(String),
+    PlayerId(PlayerId),
+    Position(PlayerId, Position),
 }

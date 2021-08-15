@@ -5,13 +5,16 @@ use bevy_networking_turbulence::{
     ConnectionChannelsBuilder, NetworkEvent,
     NetworkResource, NetworkingPlugin,
 };
+use log::LevelFilter;
 use simple_logger::SimpleLogger;
-use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, ClientMessage, SERVER_MESSAGE_SETTINGS, SERVER_PORT, ServerMessage};
+use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, ClientMessage, PlayerId, SERVER_MESSAGE_SETTINGS, SERVER_PORT, ServerMessage};
 
 fn main() {
     SimpleLogger::new()
+        .with_level(LevelFilter::Off)
+        .with_module_level("woods_server", LevelFilter::Trace)
         .init()
-        .expect("A logger was already initialized");
+        .unwrap();
 
     App::build()
         .insert_resource(ScheduleRunnerSettings::run_loop(Duration::from_secs_f64(
@@ -62,7 +65,7 @@ fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventRea
                             log::debug!("Connected on [{}]", handle);
                         }
                     }
-                    net.send_message(*handle, ServerMessage::Welcome("welcome!".to_owned()))
+                    net.send_message(*handle, ServerMessage::PlayerId(PlayerId(*handle)))
                         .expect("Message failed");
                 }
                 None => panic!("Got packet for non-existing connection [{}]", handle),
@@ -82,9 +85,9 @@ fn handle_messages_server(mut net: ResMut<NetworkResource>) {
                 client_message
             );
             match client_message {
-                ClientMessage::Hello(id) => {
-                    log::info!("Client [{}] connected on [{}]", id, handle);
-                }
+                ClientMessage::Move(position) => {
+                    log::info!("[{}] mov {:?}", handle, position)
+                },
             }
         }
     }
