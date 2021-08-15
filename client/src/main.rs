@@ -20,8 +20,6 @@ use woods_common::{
     SERVER_PORT,
 };
 
-struct ServerHandle(Option<u32>);
-
 fn main() {
     SimpleLogger::new()
         .with_level(LevelFilter::Off)
@@ -45,7 +43,6 @@ fn main() {
         .add_system(walk_animation.system())
         .add_system(handle_packets.system())
         .add_system_to_stage(CoreStage::PreUpdate, handle_messages_client.system())
-        .insert_resource(ServerHandle(None))
         .run();
 }
 
@@ -53,7 +50,6 @@ fn keyboard_movement(
     mut keyboard_input_events: EventReader<KeyboardInput>,
     mut query: Query<(&Player, &mut Transform, &mut Direction, &mut WalkAnimation)>,
     mut net: ResMut<NetworkResource>,
-    server_handle: Res<ServerHandle>,
 ) {
     for event in keyboard_input_events
         .iter()
@@ -63,34 +59,16 @@ fn keyboard_movement(
             if let Ok(to_direction) = key_code.try_into() {
                 for (_, transform, direction, walk_animation) in query.iter_mut() {
                     start_walking(to_direction, direction, walk_animation, transform);
-                    send_move(Position { x: 0, y: 1 }, &server_handle, &mut net);
+                    send_move(Position { x: 0, y: 1 }, &mut net);
                 }
             }
         }
     }
 }
 
-fn send_move(
-    position: Position,
-    server_handle: &Res<ServerHandle>,
-    net: &mut ResMut<NetworkResource>,
-) {
-    if let Some(handle) = server_handle.0 {
-        log::info!("Sending Move on [{}]", handle);
-        match net.send_message(handle, ClientMessage::Move(position)) {
-            Ok(msg) => match msg {
-                Some(msg) => {
-                    log::error!("Unable to send: {:?}", msg);
-                }
-                None => {}
-            },
-            Err(err) => {
-                log::error!("Unable to send: {:?}", err);
-            }
-        };
-    } else {
-        log::warn!("Cannot send move; not connected to server")
-    }
+fn send_move(position: Position, net: &mut ResMut<NetworkResource>) {
+    log::info!("Broadcasting move to {:?}", position);
+    net.broadcast_message(ClientMessage::Move(position));
 }
 
 fn start_walking(
@@ -188,27 +166,22 @@ fn handle_messages_client(mut net: ResMut<NetworkResource>) {
 fn handle_packets(
     mut net: ResMut<NetworkResource>,
     mut network_events: EventReader<NetworkEvent>,
-    mut server_handle: ResMut<ServerHandle>,
 ) {
     for event in network_events.iter() {
         match event {
             NetworkEvent::Connected(handle) => match net.connections.get_mut(handle) {
-                Some(connection) => {
-                    match connection.remote_address() {
-                        Some(remote_address) => {
-                            log::info!(
-                                "Incoming connection on [{}] from [{}]",
-                                handle,
-                                remote_address
-                            );
-                        }
-                        None => {
-                            log::info!("Connected on [{}]", handle);
-                        }
+                Some(connection) => match connection.remote_address() {
+                    Some(remote_address) => {
+                        log::info!(
+                            "Incoming connection on [{}] from [{}]",
+                            handle,
+                            remote_address
+                        );
                     }
-
-                    *server_handle = ServerHandle(Some(*handle));
-                }
+                    None => {
+                        log::info!("Connected on [{}]", handle);
+                    }
+                },
                 None => panic!("Got packet for non-existing connection [{}]", handle),
             },
             _ => {}
