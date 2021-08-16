@@ -1,4 +1,5 @@
 use bevy::{math::Vec3, prelude::*};
+use woods_common::Position;
 use std::convert::TryFrom;
 
 const TILE_SIZE: f32 = 20.0;
@@ -50,6 +51,24 @@ impl Direction {
             }
             Direction::South => {
                 translation.y -= STEP_DIST;
+            }
+        }
+    }
+
+    // TODO: consolidate with above?
+    pub fn translate_position(&self, position: &mut Position) {
+        match self {
+            Direction::East => {
+                position.x += 1;
+            }
+            Direction::West => {
+                position.x -= 1;
+            }
+            Direction::North => {
+                position.y += 1;
+            }
+            Direction::South => {
+                position.y -= 1;
             }
         }
     }

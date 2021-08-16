@@ -1,6 +1,7 @@
 use bevy::{
     input::{keyboard::KeyboardInput, ElementState},
     prelude::*,
+    render::camera::WindowOrigin,
 };
 use bevy_networking_turbulence::{
     ConnectionChannelsBuilder, NetworkEvent, NetworkResource, NetworkingPlugin,
@@ -48,7 +49,13 @@ fn main() {
 
 fn keyboard_movement(
     mut keyboard_input_events: EventReader<KeyboardInput>,
-    mut query: Query<(&Player, &mut Transform, &mut Direction, &mut WalkAnimation)>,
+    mut query: Query<(
+        &Player,
+        &mut Transform,
+        &mut Direction,
+        &mut WalkAnimation,
+        &mut Position,
+    )>,
     mut net: ResMut<NetworkResource>,
 ) {
     for event in keyboard_input_events
@@ -57,9 +64,16 @@ fn keyboard_movement(
     {
         if let Some(key_code) = event.key_code {
             if let Ok(to_direction) = key_code.try_into() {
-                for (_, transform, direction, walk_animation) in query.iter_mut() {
-                    start_walking(to_direction, direction, walk_animation, transform);
-                    send_move(Position { x: 0, y: 1 }, &mut net);
+                for (_, mut transform, direction, walk_animation, mut position) in query.iter_mut() {
+                    start_walking(
+                        to_direction,
+                        direction,
+                        walk_animation,
+                        &mut transform,
+                        &mut position,
+                    );
+
+                    send_move(*position, &mut net)
                 }
             }
         }
@@ -75,7 +89,8 @@ fn start_walking(
     to_direction: Direction,
     mut direction: Mut<Direction>,
     mut walk_animation: Mut<WalkAnimation>,
-    mut transform: Mut<Transform>,
+    transform: &mut Mut<Transform>,
+    mut position: &mut Mut<Position>,
 ) {
     if walk_animation.running() {
         return;
@@ -83,6 +98,7 @@ fn start_walking(
 
     if to_direction == *direction {
         to_direction.translate(&mut transform.translation);
+        to_direction.translate_position(&mut position);
         *walk_animation = WalkAnimation::new();
     } else {
         // Don't move if just changing directions
@@ -118,15 +134,18 @@ fn setup_player(
     let texture_handle = asset_server.load("player.png");
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(19.0, 38.0), 24, 1);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
-    commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    let mut camera = OrthographicCameraBundle::new_2d();
+    camera.orthographic_projection.window_origin = WindowOrigin::BottomLeft;
+    commands.spawn_bundle(camera);
     commands
         .spawn_bundle(SpriteSheetBundle {
             texture_atlas: texture_atlas_handle,
-            transform: Transform::from_xyz(0., 100., 0.),
+            transform: Transform::from_xyz(10., 20., 0.),
             ..Default::default()
         })
         .insert(Player)
         .insert(Direction::South)
+        .insert(Position { x: 0, y: 0 })
         .insert(WalkAnimation::default());
 }
 
@@ -163,10 +182,7 @@ fn handle_messages_client(mut net: ResMut<NetworkResource>) {
     }
 }
 
-fn handle_packets(
-    mut net: ResMut<NetworkResource>,
-    mut network_events: EventReader<NetworkEvent>,
-) {
+fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventReader<NetworkEvent>) {
     for event in network_events.iter() {
         match event {
             NetworkEvent::Connected(handle) => match net.connections.get_mut(handle) {
