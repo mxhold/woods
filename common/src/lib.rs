@@ -52,6 +52,7 @@ pub struct Position {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientMessage {
+    Hello,
     Move(Position),
 }
 

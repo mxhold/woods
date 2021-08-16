@@ -88,6 +88,9 @@ fn handle_messages_server(mut net: ResMut<NetworkResource>) {
                 ClientMessage::Move(position) => {
                     log::info!("[{}] mov {:?}", handle, position)
                 },
+                ClientMessage::Hello => {
+                    log::info!("hello {:?}", handle);
+                }
             }
         }
     }

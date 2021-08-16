@@ -17,8 +17,8 @@ mod direction;
 mod walk_animation;
 
 use woods_common::{
-    ClientMessage, Position, ServerMessage, CLIENT_STATE_MESSAGE_SETTINGS, SERVER_MESSAGE_SETTINGS,
-    SERVER_PORT,
+    ClientMessage, PlayerId, Position, ServerMessage, CLIENT_STATE_MESSAGE_SETTINGS,
+    SERVER_MESSAGE_SETTINGS, SERVER_PORT,
 };
 
 fn main() {
@@ -49,12 +49,7 @@ fn main() {
 
 fn keyboard_movement(
     mut keyboard_input_events: EventReader<KeyboardInput>,
-    mut query: Query<(
-        &Player,
-        &mut Direction,
-        &mut WalkAnimation,
-        &mut Position,
-    )>,
+    mut query: Query<(&Player, &PlayerId, &mut Direction, &mut WalkAnimation, &mut Position)>,
     mut net: ResMut<NetworkResource>,
 ) {
     for event in keyboard_input_events
@@ -63,13 +58,9 @@ fn keyboard_movement(
     {
         if let Some(key_code) = event.key_code {
             if let Ok(to_direction) = key_code.try_into() {
-                for (_, direction, walk_animation, mut position) in query.iter_mut() {
-                    start_walking(
-                        to_direction,
-                        direction,
-                        walk_animation,
-                        &mut position,
-                    );
+                for (_, player_id, direction, walk_animation, mut position) in query.iter_mut() {
+                    start_walking(to_direction, direction, walk_animation, &mut position);
+                    log::info!("PlayerID={:?}", player_id);
 
                     send_move(*position, &mut net)
                 }
@@ -140,9 +131,9 @@ fn setup_player(
             transform: Transform::from_xyz(10., 20., 0.),
             ..Default::default()
         })
-        .insert(Player)
         .insert(Direction::South)
-        .insert(Position { x: 0, y: 0 })
+        .insert(Player)
+        .insert(Position { x: 3, y: 4 })
         .insert(WalkAnimation::default());
 }
 
@@ -165,7 +156,11 @@ fn network_setup(mut net: ResMut<NetworkResource>) {
     });
 }
 
-fn handle_messages_client(mut net: ResMut<NetworkResource>) {
+fn handle_messages_client(
+    mut net: ResMut<NetworkResource>,
+    query: Query<Entity, With<Player>>,
+    mut commands: Commands,
+) {
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
 
@@ -175,6 +170,14 @@ fn handle_messages_client(mut net: ResMut<NetworkResource>) {
                 handle,
                 server_message
             );
+
+            match server_message {
+                ServerMessage::PlayerId(player_id) => {
+                    let player = query.single().unwrap();
+                    commands.entity(player).insert(PlayerId(player_id.0));
+                }
+                _ => {}
+            }
         }
     }
 }
@@ -183,18 +186,22 @@ fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventRea
     for event in network_events.iter() {
         match event {
             NetworkEvent::Connected(handle) => match net.connections.get_mut(handle) {
-                Some(connection) => match connection.remote_address() {
-                    Some(remote_address) => {
-                        log::info!(
-                            "Incoming connection on [{}] from [{}]",
-                            handle,
-                            remote_address
-                        );
-                    }
-                    None => {
-                        log::info!("Connected on [{}]", handle);
-                    }
-                },
+                Some(connection) => {
+                    match connection.remote_address() {
+                        Some(remote_address) => {
+                            log::info!(
+                                "Incoming connection on [{}] from [{}]",
+                                handle,
+                                remote_address
+                            );
+                        }
+                        None => {
+                            log::info!("Connected on [{}]", handle);
+                        }
+                    };
+
+                    net.broadcast_message(ClientMessage::Hello);
+                }
                 None => panic!("Got packet for non-existing connection [{}]", handle),
             },
             _ => {}
