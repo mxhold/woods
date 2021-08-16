@@ -2,8 +2,8 @@ use bevy::{math::Vec3, prelude::*};
 use woods_common::Position;
 use std::convert::TryFrom;
 
-const TILE_SIZE: f32 = 20.0;
-const STEP_DIST: f32 = TILE_SIZE / 3.0;
+pub const TILE_SIZE: f32 = 20.0;
+pub const STEP_DIST: f32 = TILE_SIZE / 3.0;
 const FRAMES_PER_DIRECTION: u32 = 6;
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]

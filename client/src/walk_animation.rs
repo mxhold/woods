@@ -1,5 +1,8 @@
 use bevy::prelude::*;
+use woods_common::Position;
 use std::time::Duration;
+
+use crate::direction::{Direction, TILE_SIZE, STEP_DIST};
 
 const WALK_DURATION: Duration = Duration::from_millis(300 / 3);
 
@@ -29,6 +32,15 @@ impl WalkStage {
             WalkStage::Stop => 1,
         }
     }
+
+    fn step_offset(&self) -> f32 {
+        match self {
+            WalkStage::Step1 => 3.0 * STEP_DIST,
+            WalkStage::Pause => 2.0 * STEP_DIST,
+            WalkStage::Step2 => 1.0 * STEP_DIST,
+            WalkStage::Stop => 0.0 * STEP_DIST,
+        }
+    }
 }
 
 pub struct WalkAnimation {
@@ -52,17 +64,12 @@ impl WalkAnimation {
         self.stage.sprite_index_offset()
     }
 
-    pub fn stage_finished(&mut self, duration: Duration) -> bool {
+    pub fn tick(&mut self, duration: Duration) {
         if let Some(ref mut timer) = self.timer {
             timer.tick(duration);
             if timer.finished() {
                 self.next();
-                return true;
-            } else {
-                return false;
             }
-        } else {
-            return false;
         }
     }
 
@@ -73,6 +80,30 @@ impl WalkAnimation {
         } else {
             self.timer = Some(Timer::new(WALK_DURATION, false))
         }
+    }
+
+    pub fn translate(&self, position: &Position, direction: &Direction) -> Vec3 {
+        let mut translation = Vec3::new(
+            (position.x as f32 * TILE_SIZE).into(),
+            (position.y as f32 * TILE_SIZE).into(),
+            0.0,
+        );
+        match direction {
+            Direction::East => {
+                translation.x -= self.stage.step_offset();
+            }
+            Direction::West => {
+                translation.x += self.stage.step_offset();
+            }
+            Direction::North => {
+                translation.y -= self.stage.step_offset();
+            }
+            Direction::South => {
+                translation.y += self.stage.step_offset();
+            }
+        }
+
+        translation
     }
 }
 

@@ -51,7 +51,6 @@ fn keyboard_movement(
     mut keyboard_input_events: EventReader<KeyboardInput>,
     mut query: Query<(
         &Player,
-        &mut Transform,
         &mut Direction,
         &mut WalkAnimation,
         &mut Position,
@@ -64,12 +63,11 @@ fn keyboard_movement(
     {
         if let Some(key_code) = event.key_code {
             if let Ok(to_direction) = key_code.try_into() {
-                for (_, mut transform, direction, walk_animation, mut position) in query.iter_mut() {
+                for (_, direction, walk_animation, mut position) in query.iter_mut() {
                     start_walking(
                         to_direction,
                         direction,
                         walk_animation,
-                        &mut transform,
                         &mut position,
                     );
 
@@ -89,7 +87,6 @@ fn start_walking(
     to_direction: Direction,
     mut direction: Mut<Direction>,
     mut walk_animation: Mut<WalkAnimation>,
-    transform: &mut Mut<Transform>,
     mut position: &mut Mut<Position>,
 ) {
     if walk_animation.running() {
@@ -97,7 +94,6 @@ fn start_walking(
     }
 
     if to_direction == *direction {
-        to_direction.translate(&mut transform.translation);
         to_direction.translate_position(&mut position);
         *walk_animation = WalkAnimation::new();
     } else {
@@ -112,15 +108,16 @@ fn walk_animation(
         &mut TextureAtlasSprite,
         &Direction,
         &mut WalkAnimation,
+        &Position,
         &mut Transform,
     )>,
 ) {
-    for (mut sprite, direction, mut walk_animation, mut transform) in query.iter_mut() {
+    for (mut sprite, direction, mut walk_animation, position, mut transform) in query.iter_mut() {
+        walk_animation.tick(time.delta());
+
         sprite.index = walk_animation.sprite_index_offset() + direction.sprite_index_offset();
 
-        if walk_animation.stage_finished(time.delta()) {
-            direction.translate(&mut transform.translation);
-        }
+        transform.translation = walk_animation.translate(position, direction);
     }
 }
 
