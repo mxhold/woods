@@ -1,13 +1,22 @@
+use std::collections::HashMap;
 use std::{net::SocketAddr, time::Duration};
 
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
 use bevy_networking_turbulence::{
-    ConnectionChannelsBuilder, NetworkEvent,
-    NetworkResource, NetworkingPlugin,
+    ConnectionChannelsBuilder, NetworkEvent, NetworkResource, NetworkingPlugin,
 };
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
-use woods_common::{CLIENT_STATE_MESSAGE_SETTINGS, ClientMessage, PlayerId, SERVER_MESSAGE_SETTINGS, SERVER_PORT, ServerMessage};
+use woods_common::{
+    ClientMessage, PlayerId, Position, ServerMessage, CLIENT_STATE_MESSAGE_SETTINGS,
+    SERVER_MESSAGE_SETTINGS, SERVER_PORT,
+};
+
+#[derive(Default)]
+struct Players(pub HashMap<PlayerId, Entity>);
+
+#[derive(Default)]
+struct ServerMessages(pub Vec<(u32, ServerMessage)>);
 
 fn main() {
     SimpleLogger::new()
@@ -23,9 +32,13 @@ fn main() {
         .add_plugins(MinimalPlugins)
         .add_plugin(NetworkingPlugin::default())
         .add_startup_system(setup.system())
-        .add_system_to_stage(CoreStage::PreUpdate, handle_messages_server.system())
         .add_startup_system(network_setup.system())
+        .add_system_to_stage(CoreStage::PreUpdate, handle_messages_server.system())
+        .add_system_to_stage(CoreStage::PostUpdate, broadcast_moves.system())
         .add_system(handle_packets.system())
+        .add_system(send_messages.system())
+        .insert_resource(Players::default())
+        .insert_resource(ServerMessages::default())
         .run();
 }
 
@@ -75,7 +88,12 @@ fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventRea
     }
 }
 
-fn handle_messages_server(mut net: ResMut<NetworkResource>) {
+fn handle_messages_server(
+    mut net: ResMut<NetworkResource>,
+    mut commands: Commands,
+    mut players: ResMut<Players>,
+    mut messages: ResMut<ServerMessages>,
+) {    
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
         while let Some(client_message) = channels.recv::<ClientMessage>() {
@@ -86,12 +104,36 @@ fn handle_messages_server(mut net: ResMut<NetworkResource>) {
             );
             match client_message {
                 ClientMessage::Move(position) => {
-                    log::info!("[{}] mov {:?}", handle, position)
-                },
+                    log::info!("recv [{}] mov {:?}", handle, position);
+                    let player = players.0.get(&PlayerId(*handle)).expect("no player with handle");
+                    commands.entity(*player).insert(position);
+                }
                 ClientMessage::Hello => {
                     log::info!("hello {:?}", handle);
+                    let player_id = PlayerId(*handle);
+                    let player = commands.spawn().id();
+                    commands.entity(player).insert(player_id);
+                    players.0.insert(player_id, player);
+                    messages.0.push((*handle, ServerMessage::PlayerId(player_id)));
                 }
             }
         }
+    }
+}
+
+fn send_messages(
+    mut net: ResMut<NetworkResource>,
+    mut messages: ResMut<ServerMessages>
+) {
+    for (handle, message) in messages.0.drain(..) {
+        log::info!("send {:?}", message);
+        net.send_message(handle, message).unwrap();
+    }
+}
+
+fn broadcast_moves(mut net: ResMut<NetworkResource>, query: Query<(&PlayerId, &Position), Changed<Position>>) {
+    for (player_id, position) in query.iter() {
+        log::info!("broadcasting position {:?} at {:?}", player_id, position);
+        net.broadcast_message(ServerMessage::Position(*player_id, *position));
     }
 }

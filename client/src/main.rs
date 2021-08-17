@@ -8,7 +8,7 @@ use bevy_networking_turbulence::{
 };
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
-use std::{convert::TryInto, net::SocketAddr};
+use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
 
 use direction::Direction;
 use walk_animation::WalkAnimation;
@@ -24,6 +24,7 @@ use woods_common::{
 fn main() {
     SimpleLogger::new()
         .with_level(LevelFilter::Off)
+        .with_module_level("bevy_networking_turbulence", LevelFilter::Trace)
         .with_module_level("woods_client", LevelFilter::Trace)
         .init()
         .unwrap();
@@ -35,6 +36,7 @@ fn main() {
             height: 300.0,
             ..Default::default()
         })
+        .insert_resource(Players::default())
         .add_plugins(DefaultPlugins)
         .add_plugin(NetworkingPlugin::default())
         .add_startup_system(setup_player.system())
@@ -49,7 +51,7 @@ fn main() {
 
 fn keyboard_movement(
     mut keyboard_input_events: EventReader<KeyboardInput>,
-    mut query: Query<(&Player, &PlayerId, &mut Direction, &mut WalkAnimation, &mut Position)>,
+    mut query: Query<(&Player, &mut Direction, &mut WalkAnimation, &mut Position)>,
     mut net: ResMut<NetworkResource>,
 ) {
     for event in keyboard_input_events
@@ -58,35 +60,34 @@ fn keyboard_movement(
     {
         if let Some(key_code) = event.key_code {
             if let Ok(to_direction) = key_code.try_into() {
-                for (_, player_id, direction, walk_animation, mut position) in query.iter_mut() {
-                    start_walking(to_direction, direction, walk_animation, &mut position);
-                    log::info!("PlayerID={:?}", player_id);
-
-                    send_move(*position, &mut net)
+                for (_, direction, walk_animation, position) in query.iter_mut() {
+                    start_walking(to_direction, direction, walk_animation, position, &mut net);
                 }
             }
         }
     }
 }
 
-fn send_move(position: Position, net: &mut ResMut<NetworkResource>) {
-    log::info!("Broadcasting move to {:?}", position);
-    net.broadcast_message(ClientMessage::Move(position));
-}
-
 fn start_walking(
     to_direction: Direction,
     mut direction: Mut<Direction>,
     mut walk_animation: Mut<WalkAnimation>,
-    mut position: &mut Mut<Position>,
+    mut position: Mut<Position>,
+    net: &mut ResMut<NetworkResource>,
 ) {
     if walk_animation.running() {
         return;
     }
 
     if to_direction == *direction {
-        to_direction.translate_position(&mut position);
+        let translation = to_direction.translation();
+        position.x = (translation.x + position.x as f32) as u16;
+        position.y = (translation.y + position.y as f32) as u16;
+
         *walk_animation = WalkAnimation::new();
+
+        log::info!("Broadcasting move to {:?}", position);
+        net.broadcast_message(ClientMessage::Move(*position));
     } else {
         // Don't move if just changing directions
         *direction = to_direction;
@@ -114,27 +115,50 @@ fn walk_animation(
 
 struct Player;
 
+#[derive(Bundle)]
+struct PlayerBundle {
+    #[bundle]
+    sprite_sheet: SpriteSheetBundle,
+    direction: Direction,
+    position: Position,
+    walk_animation: WalkAnimation,
+}
+
+impl Default for PlayerBundle {
+    fn default() -> Self {
+        Self {
+            sprite_sheet: SpriteSheetBundle {
+                transform: Transform::from_xyz(10., 20., 0.),
+                ..Default::default()
+            },
+            direction: Direction::South,
+            position: Position { x: 3, y: 4 },
+            walk_animation: Default::default(),
+        }
+    }
+}
+
 fn setup_player(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>
 ) {
     let texture_handle = asset_server.load("player.png");
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(19.0, 38.0), 24, 1);
-    let texture_atlas_handle = texture_atlases.add(texture_atlas);
+    let texture_atlas_handle =  texture_atlases.add(texture_atlas);
+    
     let mut camera = OrthographicCameraBundle::new_2d();
     camera.orthographic_projection.window_origin = WindowOrigin::BottomLeft;
     commands.spawn_bundle(camera);
     commands
-        .spawn_bundle(SpriteSheetBundle {
-            texture_atlas: texture_atlas_handle,
-            transform: Transform::from_xyz(10., 20., 0.),
+        .spawn_bundle(PlayerBundle {
+            sprite_sheet: SpriteSheetBundle {
+                texture_atlas: texture_atlas_handle,
+                ..Default::default()
+            },
             ..Default::default()
         })
-        .insert(Direction::South)
-        .insert(Player)
-        .insert(Position { x: 3, y: 4 })
-        .insert(WalkAnimation::default());
+        .insert(Player);
 }
 
 fn connect(mut net: ResMut<NetworkResource>) {
@@ -156,10 +180,16 @@ fn network_setup(mut net: ResMut<NetworkResource>) {
     });
 }
 
+#[derive(Default)]
+struct Players(pub HashMap<PlayerId, Entity>);
+
 fn handle_messages_client(
     mut net: ResMut<NetworkResource>,
-    query: Query<Entity, With<Player>>,
+    // query: Query<Entity, With<Player>>,
     mut commands: Commands,
+    mut players: ResMut<Players>,
+    asset_server: Res<AssetServer>,
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
@@ -173,10 +203,39 @@ fn handle_messages_client(
 
             match server_message {
                 ServerMessage::PlayerId(player_id) => {
-                    let player = query.single().unwrap();
-                    commands.entity(player).insert(PlayerId(player_id.0));
+                    // let player = query.single().unwrap();
+                    // commands.entity(player).insert(PlayerId(player_id.0));
                 }
-                _ => {}
+                ServerMessage::Position(player_id, position) => {
+                    log::info!("{:?} at {:?}", player_id, position);
+                    match players.0.get(&player_id) {
+                        Some(player) => {
+                            commands.entity(*player).insert(position);
+                        }
+                        None => {
+                            let player = commands.spawn().id();
+                            let texture_handle = asset_server.load("player.png");
+                            let texture_atlas = TextureAtlas::from_grid(
+                                texture_handle,
+                                Vec2::new(19.0, 38.0),
+                                24,
+                                1,
+                            );
+                            let texture_atlas_handle = texture_atlases.add(texture_atlas);
+                            commands
+                                .entity(player)
+                                .insert_bundle(PlayerBundle {
+                                    sprite_sheet: SpriteSheetBundle {
+                                        texture_atlas: texture_atlas_handle,
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                })
+                                .insert(position);
+                            players.0.insert(player_id, player);
+                        }
+                    }
+                }
             }
         }
     }

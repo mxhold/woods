@@ -41,7 +41,7 @@ pub enum Direction {
     West,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone,  Eq, PartialEq)]
+#[derive(Hash, Serialize, Deserialize, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct PlayerId(pub u32);
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
@@ -56,7 +56,7 @@ pub enum ClientMessage {
     Move(Position),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum ServerMessage {
     PlayerId(PlayerId),
     Position(PlayerId, Position),
