@@ -45,7 +45,7 @@ fn main() {
         .add_system(keyboard_movement.system())
         .add_system(walk_animation.system())
         .add_system(handle_network_connections.system())
-        .add_system_to_stage(CoreStage::PostUpdate, handle_messages.system())
+        .add_system(handle_messages.system())
         .run();
 }
 
@@ -208,6 +208,10 @@ fn handle_messages(
                     players.0.insert(player_id, me);
                 }
                 ServerMessage::Move(player_id, direction, position) => {
+                    // TODO: the fact that you can skip this line and not get a compiler error
+                    // makes me want to try to find some way to avoid setting components of unknown types!
+                    let direction: Direction = direction.into();
+                    
                     log::debug!("{:?} moved {:?} to {:?}", player_id, direction, position);
 
                     match players.0.get(&player_id) {
