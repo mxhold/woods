@@ -14,6 +14,28 @@ pub enum Direction {
     West,
 }
 
+impl From<woods_common::Direction> for Direction {
+    fn from(direction: woods_common::Direction) -> Self {
+        match direction {
+            woods_common::Direction::North => Self::North,
+            woods_common::Direction::South => Self::South,
+            woods_common::Direction::East => Self::East,
+            woods_common::Direction::West => Self::West,
+        }
+    }
+}
+
+impl From<Direction> for woods_common::Direction {
+    fn from(direction: Direction) -> Self {
+        match direction {
+            Direction::North => woods_common::Direction::North,
+            Direction::South => woods_common::Direction::South,
+            Direction::East => woods_common::Direction::East,
+            Direction::West => woods_common::Direction::West,
+        }
+    }
+}
+
 impl TryFrom<KeyCode> for Direction {
     type Error = &'static str;
 

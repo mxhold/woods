@@ -5,7 +5,7 @@ use bevy_networking_turbulence::{MessageChannelMode, MessageChannelSettings, Rel
 
 pub const SERVER_PORT: u16 = 14192;
 
-pub const CLIENT_STATE_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettings {
+pub const CLIENT_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettings {
   channel: 0,
   channel_mode: MessageChannelMode::Reliable {
       reliability_settings: ReliableChannelSettings {
@@ -33,7 +33,7 @@ pub const SERVER_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettin
   packet_buffer_size: 8,
 };
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Copy, Clone)]
 pub enum Direction {
     North,
     South,
@@ -53,11 +53,11 @@ pub struct Position {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientMessage {
     Hello,
-    Move(Position),
+    Move(Direction, Position),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum ServerMessage {
-    PlayerId(PlayerId),
-    Position(PlayerId, Position),
+    Hello(PlayerId, Position),
+    Move(PlayerId, Direction, Position),
 }

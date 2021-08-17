@@ -6,17 +6,14 @@ use bevy_networking_turbulence::{
     ConnectionChannelsBuilder, NetworkEvent, NetworkResource, NetworkingPlugin,
 };
 use log::LevelFilter;
+use rand::{thread_rng, Rng};
 use simple_logger::SimpleLogger;
-use woods_common::{
-    ClientMessage, PlayerId, Position, ServerMessage, CLIENT_STATE_MESSAGE_SETTINGS,
-    SERVER_MESSAGE_SETTINGS, SERVER_PORT,
-};
+use woods_common::{CLIENT_MESSAGE_SETTINGS, ClientMessage, Direction, PlayerId, Position, SERVER_MESSAGE_SETTINGS, SERVER_PORT, ServerMessage};
+
+struct PlayerConnected(PlayerId);
 
 #[derive(Default)]
-struct Players(pub HashMap<PlayerId, Entity>);
-
-#[derive(Default)]
-struct ServerMessages(pub Vec<(u32, ServerMessage)>);
+struct PlayerIds(pub HashMap<PlayerId, Entity>);
 
 fn main() {
     SimpleLogger::new()
@@ -31,29 +28,26 @@ fn main() {
         )))
         .add_plugins(MinimalPlugins)
         .add_plugin(NetworkingPlugin::default())
-        .add_startup_system(setup.system())
         .add_startup_system(network_setup.system())
-        .add_system_to_stage(CoreStage::PreUpdate, handle_messages_server.system())
+        .add_system_to_stage(CoreStage::PreUpdate, handle_messages.system())
+        .add_system(handle_network_connections.system())
+        .add_system(handle_connections.system())
         .add_system_to_stage(CoreStage::PostUpdate, broadcast_moves.system())
-        .add_system(handle_packets.system())
-        .add_system(send_messages.system())
-        .insert_resource(Players::default())
-        .insert_resource(ServerMessages::default())
+        .insert_resource(PlayerIds::default())
+        .add_event::<PlayerConnected>()
         .run();
 }
 
-fn setup(mut net: ResMut<NetworkResource>) {
+fn network_setup(mut net: ResMut<NetworkResource>) {
     let ip_address =
         bevy_networking_turbulence::find_my_ip_address().expect("can't find ip address");
     let socket_address = SocketAddr::new(ip_address, SERVER_PORT);
     log::info!("Starting server");
     net.listen(socket_address, None, None);
-}
 
-fn network_setup(mut net: ResMut<NetworkResource>) {
     net.set_channels_builder(|builder: &mut ConnectionChannelsBuilder| {
         builder
-            .register::<ClientMessage>(CLIENT_STATE_MESSAGE_SETTINGS)
+            .register::<ClientMessage>(CLIENT_MESSAGE_SETTINGS)
             .unwrap();
         builder
             .register::<ServerMessage>(SERVER_MESSAGE_SETTINGS)
@@ -61,7 +55,11 @@ fn network_setup(mut net: ResMut<NetworkResource>) {
     });
 }
 
-fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventReader<NetworkEvent>) {
+fn handle_network_connections(
+    mut net: ResMut<NetworkResource>,
+    mut network_events: EventReader<NetworkEvent>,
+    mut ev_player_connected: EventWriter<PlayerConnected>,
+) {
     for event in network_events.iter() {
         match event {
             NetworkEvent::Connected(handle) => match net.connections.get_mut(handle) {
@@ -78,8 +76,7 @@ fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventRea
                             log::debug!("Connected on [{}]", handle);
                         }
                     }
-                    net.send_message(*handle, ServerMessage::PlayerId(PlayerId(*handle)))
-                        .expect("Message failed");
+                    ev_player_connected.send(PlayerConnected(PlayerId(*handle)));
                 }
                 None => panic!("Got packet for non-existing connection [{}]", handle),
             },
@@ -88,12 +85,39 @@ fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventRea
     }
 }
 
-fn handle_messages_server(
+fn random_position() -> Position {
+    let mut rng = thread_rng();
+    let x: u16 = rng.gen_range(0..16);
+    let y: u16 = rng.gen_range(0..16);
+
+    Position { x, y }
+}
+
+fn handle_connections(
+    mut net: ResMut<NetworkResource>,
+    mut ev_player_connected: EventReader<PlayerConnected>,
+    mut commands: Commands,
+    mut players: ResMut<PlayerIds>,
+) {
+    for PlayerConnected(player_id) in ev_player_connected.iter() {
+        let player = commands.spawn().id();
+        let position = random_position();
+        commands
+            .entity(player)
+            .insert(player_id.clone())
+            .insert(position);
+        players.0.insert(*player_id, player);
+
+        net.send_message(player_id.0, ServerMessage::Hello(*player_id, position))
+            .expect("Hello failed");
+    }
+}
+
+fn handle_messages(
     mut net: ResMut<NetworkResource>,
     mut commands: Commands,
-    mut players: ResMut<Players>,
-    mut messages: ResMut<ServerMessages>,
-) {    
+    players: Res<PlayerIds>,
+) {
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
         while let Some(client_message) = channels.recv::<ClientMessage>() {
@@ -103,37 +127,28 @@ fn handle_messages_server(
                 client_message
             );
             match client_message {
-                ClientMessage::Move(position) => {
-                    log::info!("recv [{}] mov {:?}", handle, position);
-                    let player = players.0.get(&PlayerId(*handle)).expect("no player with handle");
-                    commands.entity(*player).insert(position);
+                ClientMessage::Move(direction, position) => {
+                    // TODO: validate new position is adjacent to existing position
+
+                    let player = players
+                        .0
+                        .get(&PlayerId(*handle))
+                        .expect("no player with handle");
+                    commands.entity(*player).insert(position).insert(direction);
                 }
                 ClientMessage::Hello => {
-                    log::info!("hello {:?}", handle);
-                    let player_id = PlayerId(*handle);
-                    let player = commands.spawn().id();
-                    commands.entity(player).insert(player_id);
-                    players.0.insert(player_id, player);
-                    messages.0.push((*handle, ServerMessage::PlayerId(player_id)));
+                    // Nothing to do -- the client just sends this to start the connection
                 }
             }
         }
     }
 }
 
-fn send_messages(
+fn broadcast_moves(
     mut net: ResMut<NetworkResource>,
-    mut messages: ResMut<ServerMessages>
+    query: Query<(&PlayerId, &Direction, &Position), Or<(Changed<Position>, Changed<Direction>)>>,
 ) {
-    for (handle, message) in messages.0.drain(..) {
-        log::info!("send {:?}", message);
-        net.send_message(handle, message).unwrap();
-    }
-}
-
-fn broadcast_moves(mut net: ResMut<NetworkResource>, query: Query<(&PlayerId, &Position), Changed<Position>>) {
-    for (player_id, position) in query.iter() {
-        log::info!("broadcasting position {:?} at {:?}", player_id, position);
-        net.broadcast_message(ServerMessage::Position(*player_id, *position));
+    for (player_id, direction, position) in query.iter() {
+        net.broadcast_message(ServerMessage::Move(*player_id, *direction, *position));
     }
 }

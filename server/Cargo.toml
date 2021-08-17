@@ -9,3 +9,4 @@ bevy_networking_turbulence = { version = "0.3.3" }
 simple_logger = { version = "1.13.0" }
 log = "0.4"
 woods-common = { path = "../common" }
+rand = "0.8.4"

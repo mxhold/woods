@@ -17,7 +17,7 @@ mod direction;
 mod walk_animation;
 
 use woods_common::{
-    ClientMessage, PlayerId, Position, ServerMessage, CLIENT_STATE_MESSAGE_SETTINGS,
+    ClientMessage, PlayerId, Position, ServerMessage, CLIENT_MESSAGE_SETTINGS,
     SERVER_MESSAGE_SETTINGS, SERVER_PORT,
 };
 
@@ -39,19 +39,19 @@ fn main() {
         .insert_resource(Players::default())
         .add_plugins(DefaultPlugins)
         .add_plugin(NetworkingPlugin::default())
-        .add_startup_system(setup_player.system())
+        .add_startup_system(setup_me.system())
         .add_startup_system(connect.system())
         .add_startup_system(network_setup.system())
         .add_system(keyboard_movement.system())
         .add_system(walk_animation.system())
-        .add_system(handle_packets.system())
-        .add_system_to_stage(CoreStage::PreUpdate, handle_messages_client.system())
+        .add_system(handle_network_connections.system())
+        .add_system_to_stage(CoreStage::PostUpdate, handle_messages.system())
         .run();
 }
 
 fn keyboard_movement(
     mut keyboard_input_events: EventReader<KeyboardInput>,
-    mut query: Query<(&Player, &mut Direction, &mut WalkAnimation, &mut Position)>,
+    mut query: Query<(&Me, &mut Direction, &mut WalkAnimation, &mut Position)>,
     mut net: ResMut<NetworkResource>,
 ) {
     for event in keyboard_input_events
@@ -85,13 +85,13 @@ fn start_walking(
         position.y = (translation.y + position.y as f32) as u16;
 
         *walk_animation = WalkAnimation::new();
-
-        log::info!("Broadcasting move to {:?}", position);
-        net.broadcast_message(ClientMessage::Move(*position));
     } else {
         // Don't move if just changing directions
         *direction = to_direction;
     }
+
+    log::info!("Broadcasting move {:?}", to_direction);
+    net.broadcast_message(ClientMessage::Move(to_direction.into(), *position));
 }
 
 fn walk_animation(
@@ -113,14 +113,13 @@ fn walk_animation(
     }
 }
 
-struct Player;
+struct Me;
 
 #[derive(Bundle)]
 struct PlayerBundle {
     #[bundle]
     sprite_sheet: SpriteSheetBundle,
     direction: Direction,
-    position: Position,
     walk_animation: WalkAnimation,
 }
 
@@ -132,21 +131,20 @@ impl Default for PlayerBundle {
                 ..Default::default()
             },
             direction: Direction::South,
-            position: Position { x: 3, y: 4 },
             walk_animation: Default::default(),
         }
     }
 }
 
-fn setup_player(
+fn setup_me(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
     let texture_handle = asset_server.load("player.png");
     let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(19.0, 38.0), 24, 1);
-    let texture_atlas_handle =  texture_atlases.add(texture_atlas);
-    
+    let texture_atlas_handle = texture_atlases.add(texture_atlas);
+
     let mut camera = OrthographicCameraBundle::new_2d();
     camera.orthographic_projection.window_origin = WindowOrigin::BottomLeft;
     commands.spawn_bundle(camera);
@@ -158,7 +156,7 @@ fn setup_player(
             },
             ..Default::default()
         })
-        .insert(Player);
+        .insert(Me);
 }
 
 fn connect(mut net: ResMut<NetworkResource>) {
@@ -172,7 +170,7 @@ fn connect(mut net: ResMut<NetworkResource>) {
 fn network_setup(mut net: ResMut<NetworkResource>) {
     net.set_channels_builder(|builder: &mut ConnectionChannelsBuilder| {
         builder
-            .register::<ClientMessage>(CLIENT_STATE_MESSAGE_SETTINGS)
+            .register::<ClientMessage>(CLIENT_MESSAGE_SETTINGS)
             .unwrap();
         builder
             .register::<ServerMessage>(SERVER_MESSAGE_SETTINGS)
@@ -183,9 +181,9 @@ fn network_setup(mut net: ResMut<NetworkResource>) {
 #[derive(Default)]
 struct Players(pub HashMap<PlayerId, Entity>);
 
-fn handle_messages_client(
+fn handle_messages(
     mut net: ResMut<NetworkResource>,
-    // query: Query<Entity, With<Player>>,
+    me_query: Query<Entity, With<Me>>,
     mut commands: Commands,
     mut players: ResMut<Players>,
     asset_server: Res<AssetServer>,
@@ -201,18 +199,34 @@ fn handle_messages_client(
                 server_message
             );
 
+            let me = me_query.single().unwrap();
+
             match server_message {
-                ServerMessage::PlayerId(player_id) => {
-                    // let player = query.single().unwrap();
-                    // commands.entity(player).insert(PlayerId(player_id.0));
+                ServerMessage::Hello(player_id, position) => {
+                    log::trace!("My id is {:?}. I'm at {:?}.", player_id, position);
+                    commands.entity(me).insert(player_id).insert(position);
+                    players.0.insert(player_id, me);
                 }
-                ServerMessage::Position(player_id, position) => {
-                    log::info!("{:?} at {:?}", player_id, position);
+                ServerMessage::Move(player_id, direction, position) => {
+                    log::debug!("{:?} moved {:?} to {:?}", player_id, direction, position);
+
                     match players.0.get(&player_id) {
                         Some(player) => {
-                            commands.entity(*player).insert(position);
+                            if player.id() == me.id() {
+                                log::trace!("Skipping move for self");
+                                // TODO: do more?
+                                continue;
+                            }
+
+                            log::debug!("Move {:?} {:?} to {:?}", player_id, direction, position);
+                            commands
+                                .entity(*player)
+                                .insert(position)
+                                .insert(direction)
+                                .insert(WalkAnimation::new());
                         }
                         None => {
+                            log::debug!("New player seen {:?} at {:?} facing {:?}", player_id, position, direction);
                             let player = commands.spawn().id();
                             let texture_handle = asset_server.load("player.png");
                             let texture_atlas = TextureAtlas::from_grid(
@@ -229,8 +243,10 @@ fn handle_messages_client(
                                         texture_atlas: texture_atlas_handle,
                                         ..Default::default()
                                     },
+                                    walk_animation: WalkAnimation::new(),
                                     ..Default::default()
                                 })
+                                .insert(direction)
                                 .insert(position);
                             players.0.insert(player_id, player);
                         }
@@ -241,7 +257,10 @@ fn handle_messages_client(
     }
 }
 
-fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventReader<NetworkEvent>) {
+fn handle_network_connections(
+    mut net: ResMut<NetworkResource>,
+    mut network_events: EventReader<NetworkEvent>,
+) {
     for event in network_events.iter() {
         match event {
             NetworkEvent::Connected(handle) => match net.connections.get_mut(handle) {
@@ -259,6 +278,8 @@ fn handle_packets(mut net: ResMut<NetworkResource>, mut network_events: EventRea
                         }
                     };
 
+                    // Gotta send something for the server to recognize the client has connected.
+                    // TODO: understand why this is necessary
                     net.broadcast_message(ClientMessage::Hello);
                 }
                 None => panic!("Got packet for non-existing connection [{}]", handle),
