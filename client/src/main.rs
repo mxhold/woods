@@ -21,6 +21,52 @@ use woods_common::{
     SERVER_MESSAGE_SETTINGS, SERVER_PORT,
 };
 
+struct WalkEvent {
+    player: Entity,
+    me: bool,
+    direction: Direction,
+    to: Position,
+    distance: u16,
+}
+
+impl WalkEvent {
+    fn from(
+        player: Entity,
+        me: bool,
+        previous_direction: Direction,
+        direction: Direction,
+        from: Position,
+    ) -> Self {
+        let distance = Self::distance(previous_direction, direction);
+        let translation = direction.translation() * distance as f32;
+        let to = Position {
+            x: (translation.x + from.x as f32) as u16,
+            y: (translation.y + from.y as f32) as u16,
+        };
+
+        WalkEvent {
+            player,
+            me,
+            direction,
+            to,
+            distance,
+        }
+    }
+
+    fn distance(previous_direction: Direction, direction: Direction) -> u16 {
+        if previous_direction == direction {
+            1
+        } else {
+            // Changing directions requires its own keydown
+            0
+        }
+    }
+
+    fn should_animate(&self) -> bool {
+        self.distance > 0
+    }
+}
+
 fn main() {
     SimpleLogger::new()
         .with_level(LevelFilter::Off)
@@ -43,16 +89,18 @@ fn main() {
         .add_startup_system(connect.system())
         .add_startup_system(network_setup.system())
         .add_system(keyboard_movement.system())
+        .add_system(walk.system())
         .add_system(walk_animation.system())
         .add_system(handle_network_connections.system())
         .add_system(handle_messages.system())
+        .add_event::<WalkEvent>()
         .run();
 }
 
 fn keyboard_movement(
     mut keyboard_input_events: EventReader<KeyboardInput>,
-    mut query: Query<(&Me, &mut Direction, &mut WalkAnimation, &mut Position)>,
-    mut net: ResMut<NetworkResource>,
+    mut query: Query<(Entity, &Me, &WalkAnimation, &Position, &Direction)>,
+    mut walk_events: EventWriter<WalkEvent>,
 ) {
     for event in keyboard_input_events
         .iter()
@@ -60,38 +108,49 @@ fn keyboard_movement(
     {
         if let Some(key_code) = event.key_code {
             if let Ok(to_direction) = key_code.try_into() {
-                for (_, direction, walk_animation, position) in query.iter_mut() {
-                    start_walking(to_direction, direction, walk_animation, position, &mut net);
+                for (entity, _, walk_animation, position, direction) in query.iter_mut() {
+                    // Ignore keys until walk animation finishes
+                    if walk_animation.running() {
+                        continue;
+                    }
+
+                    walk_events.send(WalkEvent::from(
+                        entity,
+                        true,
+                        *direction,
+                        to_direction,
+                        *position,
+                    ));
                 }
             }
         }
     }
 }
 
-fn start_walking(
-    to_direction: Direction,
-    mut direction: Mut<Direction>,
-    mut walk_animation: Mut<WalkAnimation>,
-    mut position: Mut<Position>,
-    net: &mut ResMut<NetworkResource>,
+fn walk(
+    mut walk_events: EventReader<WalkEvent>,
+    mut net: ResMut<NetworkResource>,
+    mut commands: Commands,
 ) {
-    if walk_animation.running() {
-        return;
+    for walk_event in walk_events.iter() {
+        let mut entity_commands = commands.entity(walk_event.player);
+
+        entity_commands
+            .insert(walk_event.direction)
+            .insert(walk_event.to);
+
+        if walk_event.should_animate() {
+            entity_commands.insert(WalkAnimation::new());
+        }
+
+        if walk_event.me {
+            log::info!("Broadcasting move {:?}", walk_event.direction);
+            net.broadcast_message(ClientMessage::Move(
+                walk_event.direction.into(),
+                walk_event.to,
+            ));
+        }
     }
-
-    if to_direction == *direction {
-        let translation = to_direction.translation();
-        position.x = (translation.x + position.x as f32) as u16;
-        position.y = (translation.y + position.y as f32) as u16;
-
-        *walk_animation = WalkAnimation::new();
-    } else {
-        // Don't move if just changing directions
-        *direction = to_direction;
-    }
-
-    log::info!("Broadcasting move {:?}", to_direction);
-    net.broadcast_message(ClientMessage::Move(to_direction.into(), *position));
 }
 
 fn walk_animation(
@@ -188,6 +247,7 @@ fn handle_messages(
     mut players: ResMut<Players>,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut walk_events: EventWriter<WalkEvent>,
 ) {
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
@@ -211,26 +271,32 @@ fn handle_messages(
                     // TODO: the fact that you can skip this line and not get a compiler error
                     // makes me want to try to find some way to avoid setting components of unknown types!
                     let direction: Direction = direction.into();
-                    
+
                     log::debug!("{:?} moved {:?} to {:?}", player_id, direction, position);
 
                     match players.0.get(&player_id) {
                         Some(player) => {
                             if player.id() == me.id() {
                                 log::trace!("Skipping move for self");
-                                // TODO: do more?
+                                // TODO: if the position from the server doesn't match what we have, correct it
                                 continue;
                             }
 
-                            log::debug!("Move {:?} {:?} to {:?}", player_id, direction, position);
-                            commands
-                                .entity(*player)
-                                .insert(position)
-                                .insert(direction)
-                                .insert(WalkAnimation::new());
+                            walk_events.send(WalkEvent {
+                                player: *player,
+                                me: false,
+                                direction,
+                                to: position,
+                                distance: 1, // TODO: get from server
+                            });
                         }
                         None => {
-                            log::debug!("New player seen {:?} at {:?} facing {:?}", player_id, position, direction);
+                            log::debug!(
+                                "New player seen {:?} at {:?} facing {:?}",
+                                player_id,
+                                position,
+                                direction
+                            );
                             let player = commands.spawn().id();
                             let texture_handle = asset_server.load("player.png");
                             let texture_atlas = TextureAtlas::from_grid(
@@ -253,6 +319,13 @@ fn handle_messages(
                                 .insert(direction)
                                 .insert(position);
                             players.0.insert(player_id, player);
+                            walk_events.send(WalkEvent {
+                                player,
+                                me: false,
+                                direction,
+                                to: position,
+                                distance: 1, // TODO: get from server
+                            });
                         }
                     }
                 }
