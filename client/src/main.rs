@@ -3,23 +3,21 @@ use bevy::{
     prelude::*,
     render::camera::WindowOrigin,
 };
-use bevy_networking_turbulence::{
-    ConnectionChannelsBuilder, NetworkEvent, NetworkResource, NetworkingPlugin,
-};
+
+use bevy_networking_turbulence::NetworkResource;
 use log::LevelFilter;
 use simple_logger::SimpleLogger;
-use std::{collections::HashMap, convert::TryInto, net::SocketAddr};
+use std::convert::TryInto;
 
 use direction::Direction;
 use walk_animation::WalkAnimation;
+use network::NetworkPlugin;
 
 mod direction;
+mod network;
 mod walk_animation;
 
-use woods_common::{
-    ClientMessage, PlayerId, Position, ServerMessage, CLIENT_MESSAGE_SETTINGS,
-    SERVER_MESSAGE_SETTINGS, SERVER_PORT,
-};
+use woods_common::{ClientMessage, Position};
 
 struct WalkEvent {
     player: Entity,
@@ -57,7 +55,7 @@ impl WalkEvent {
         if previous_direction == direction {
             1
         } else {
-            // Changing directions requires its own keydown
+            // Turning (i.e. changing directions) requires its own keydown
             0
         }
     }
@@ -82,17 +80,12 @@ fn main() {
             height: 300.0,
             ..Default::default()
         })
-        .insert_resource(Players::default())
         .add_plugins(DefaultPlugins)
-        .add_plugin(NetworkingPlugin::default())
+        .add_plugin(NetworkPlugin)
         .add_startup_system(setup_me.system())
-        .add_startup_system(connect.system())
-        .add_startup_system(network_setup.system())
         .add_system(keyboard_movement.system())
         .add_system(walk.system())
         .add_system(walk_animation.system())
-        .add_system(handle_network_connections.system())
-        .add_system(handle_messages.system())
         .add_event::<WalkEvent>()
         .run();
 }
@@ -216,152 +209,4 @@ fn setup_me(
             ..Default::default()
         })
         .insert(Me);
-}
-
-fn connect(mut net: ResMut<NetworkResource>) {
-    let ip_address =
-        bevy_networking_turbulence::find_my_ip_address().expect("can't find ip address");
-    let socket_address = SocketAddr::new(ip_address, SERVER_PORT);
-    log::info!("Starting client");
-    net.connect(socket_address);
-}
-
-fn network_setup(mut net: ResMut<NetworkResource>) {
-    net.set_channels_builder(|builder: &mut ConnectionChannelsBuilder| {
-        builder
-            .register::<ClientMessage>(CLIENT_MESSAGE_SETTINGS)
-            .unwrap();
-        builder
-            .register::<ServerMessage>(SERVER_MESSAGE_SETTINGS)
-            .unwrap();
-    });
-}
-
-#[derive(Default)]
-struct Players(pub HashMap<PlayerId, Entity>);
-
-fn handle_messages(
-    mut net: ResMut<NetworkResource>,
-    me_query: Query<Entity, With<Me>>,
-    mut commands: Commands,
-    mut players: ResMut<Players>,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    mut walk_events: EventWriter<WalkEvent>,
-) {
-    for (handle, connection) in net.connections.iter_mut() {
-        let channels = connection.channels().unwrap();
-
-        while let Some(server_message) = channels.recv::<ServerMessage>() {
-            log::debug!(
-                "ServerMessage received on [{}]: {:?}",
-                handle,
-                server_message
-            );
-
-            let me = me_query.single().unwrap();
-
-            match server_message {
-                ServerMessage::Hello(player_id, position) => {
-                    log::trace!("My id is {:?}. I'm at {:?}.", player_id, position);
-                    commands.entity(me).insert(player_id).insert(position);
-                    players.0.insert(player_id, me);
-                }
-                ServerMessage::Move { player_id, direction, position, distance } => {
-                    // TODO: the fact that you can skip this line and not get a compiler error
-                    // makes me want to try to find some way to avoid setting components of unknown types!
-                    let direction: Direction = direction.into();
-
-                    log::debug!("{:?} moved {:?} to {:?}", player_id, direction, position);
-
-                    match players.0.get(&player_id) {
-                        Some(player) => {
-                            if player.id() == me.id() {
-                                log::trace!("Skipping move for self");
-                                // TODO: if the position from the server doesn't match what we have, correct it
-                                continue;
-                            }
-
-                            walk_events.send(WalkEvent {
-                                player: *player,
-                                me: false,
-                                direction,
-                                to: position,
-                                distance,
-                            });
-                        }
-                        None => {
-                            log::debug!(
-                                "New player seen {:?} at {:?} facing {:?}",
-                                player_id,
-                                position,
-                                direction
-                            );
-                            let player = commands.spawn().id();
-                            let texture_handle = asset_server.load("player.png");
-                            let texture_atlas = TextureAtlas::from_grid(
-                                texture_handle,
-                                Vec2::new(19.0, 38.0),
-                                24,
-                                1,
-                            );
-                            let texture_atlas_handle = texture_atlases.add(texture_atlas);
-                            commands
-                                .entity(player)
-                                .insert_bundle(PlayerBundle {
-                                    sprite_sheet: SpriteSheetBundle {
-                                        texture_atlas: texture_atlas_handle,
-                                        ..Default::default()
-                                    },
-                                    walk_animation: WalkAnimation::new(),
-                                    ..Default::default()
-                                })
-                                .insert(direction)
-                                .insert(position);
-                            players.0.insert(player_id, player);
-                            walk_events.send(WalkEvent {
-                                player,
-                                me: false,
-                                direction,
-                                to: position,
-                                distance,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-fn handle_network_connections(
-    mut net: ResMut<NetworkResource>,
-    mut network_events: EventReader<NetworkEvent>,
-) {
-    for event in network_events.iter() {
-        match event {
-            NetworkEvent::Connected(handle) => match net.connections.get_mut(handle) {
-                Some(connection) => {
-                    match connection.remote_address() {
-                        Some(remote_address) => {
-                            log::info!(
-                                "Incoming connection on [{}] from [{}]",
-                                handle,
-                                remote_address
-                            );
-                        }
-                        None => {
-                            log::info!("Connected on [{}]", handle);
-                        }
-                    };
-
-                    // Gotta send something for the server to recognize the client has connected.
-                    // TODO: understand why this is necessary
-                    net.broadcast_message(ClientMessage::Hello);
-                }
-                None => panic!("Got packet for non-existing connection [{}]", handle),
-            },
-            _ => {}
-        }
-    }
 }
