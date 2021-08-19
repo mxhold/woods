@@ -59,5 +59,10 @@ pub enum ClientMessage {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum ServerMessage {
     Hello(PlayerId, Position),
-    Move(PlayerId, Direction, Position),
+    Move {
+      player_id: PlayerId,
+      direction: Direction,
+      position: Position,
+      distance: u16,
+    },
 }

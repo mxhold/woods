@@ -267,7 +267,7 @@ fn handle_messages(
                     commands.entity(me).insert(player_id).insert(position);
                     players.0.insert(player_id, me);
                 }
-                ServerMessage::Move(player_id, direction, position) => {
+                ServerMessage::Move { player_id, direction, position, distance } => {
                     // TODO: the fact that you can skip this line and not get a compiler error
                     // makes me want to try to find some way to avoid setting components of unknown types!
                     let direction: Direction = direction.into();
@@ -287,7 +287,7 @@ fn handle_messages(
                                 me: false,
                                 direction,
                                 to: position,
-                                distance: 1, // TODO: get from server
+                                distance,
                             });
                         }
                         None => {
@@ -324,7 +324,7 @@ fn handle_messages(
                                 me: false,
                                 direction,
                                 to: position,
-                                distance: 1, // TODO: get from server
+                                distance,
                             });
                         }
                     }

@@ -8,7 +8,10 @@ use bevy_networking_turbulence::{
 use log::LevelFilter;
 use rand::{thread_rng, Rng};
 use simple_logger::SimpleLogger;
-use woods_common::{CLIENT_MESSAGE_SETTINGS, ClientMessage, Direction, PlayerId, Position, SERVER_MESSAGE_SETTINGS, SERVER_PORT, ServerMessage};
+use woods_common::{
+    ClientMessage, Direction, PlayerId, Position, ServerMessage, CLIENT_MESSAGE_SETTINGS,
+    SERVER_MESSAGE_SETTINGS, SERVER_PORT,
+};
 
 struct PlayerConnected(PlayerId);
 
@@ -33,6 +36,7 @@ fn main() {
         .add_system(handle_network_connections.system())
         .add_system(handle_connections.system())
         .add_system_to_stage(CoreStage::PostUpdate, broadcast_moves.system())
+        .add_system_to_stage(CoreStage::PostUpdate, broadcast_turns.system())
         .insert_resource(PlayerIds::default())
         .add_event::<PlayerConnected>()
         .run();
@@ -105,6 +109,7 @@ fn handle_connections(
         commands
             .entity(player)
             .insert(player_id.clone())
+            .insert(Direction::South)
             .insert(position);
         players.0.insert(*player_id, player);
 
@@ -117,6 +122,7 @@ fn handle_messages(
     mut net: ResMut<NetworkResource>,
     mut commands: Commands,
     players: Res<PlayerIds>,
+    mut query: Query<(&Position, &Direction)>
 ) {
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
@@ -127,14 +133,24 @@ fn handle_messages(
                 client_message
             );
             match client_message {
-                ClientMessage::Move(direction, position) => {
-                    // TODO: validate new position is adjacent to existing position
+                ClientMessage::Move(new_direction, new_position) => {
 
                     let player = players
                         .0
                         .get(&PlayerId(*handle))
                         .expect("no player with handle");
-                    commands.entity(*player).insert(position).insert(direction);
+
+                    if let Ok((_current_position, current_direction)) = query.get_mut(*player) {
+                        if *current_direction != new_direction {
+                            // Player is just turning
+                            commands.entity(*player).insert(new_direction);
+                        } else {
+                            // TODO: validate new position is adjacent to existing position
+                            commands.entity(*player).insert(new_position);
+                        }
+                    } else {
+                        log::warn!("Ignoring Move for player without direction/position");
+                    }
                 }
                 ClientMessage::Hello => {
                     // Nothing to do -- the client just sends this to start the connection
@@ -146,9 +162,28 @@ fn handle_messages(
 
 fn broadcast_moves(
     mut net: ResMut<NetworkResource>,
-    query: Query<(&PlayerId, &Direction, &Position), Or<(Changed<Position>, Changed<Direction>)>>,
+    query: Query<(&PlayerId, &Direction, &Position), Changed<Position>>,
 ) {
     for (player_id, direction, position) in query.iter() {
-        net.broadcast_message(ServerMessage::Move(*player_id, *direction, *position));
+        net.broadcast_message(ServerMessage::Move {
+            player_id: *player_id,
+            direction: *direction,
+            position: *position,
+            distance: 1,
+        });
+    }
+}
+
+fn broadcast_turns(
+    mut net: ResMut<NetworkResource>,
+    query: Query<(&PlayerId, &Direction, &Position), Changed<Direction>>,
+) {
+    for (player_id, direction, position) in query.iter() {
+        net.broadcast_message(ServerMessage::Move {
+            player_id: *player_id,
+            direction: *direction,
+            position: *position,
+            distance: 0,
+        });
     }
 }
