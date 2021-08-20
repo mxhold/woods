@@ -6,10 +6,10 @@ use bevy_networking_turbulence::{
 };
 use woods_common::{
     ClientMessage, PlayerId, ServerMessage, CLIENT_MESSAGE_SETTINGS, SERVER_MESSAGE_SETTINGS,
-    SERVER_PORT
+    SERVER_PORT,
 };
 
-use crate::{walk_animation::WalkAnimation, Me, PlayerBundle, WalkEvent};
+use crate::{Me, WalkEvent, player::{PlayerTextureAtlasHandle, insert_player}};
 
 #[derive(Default)]
 struct Players(pub HashMap<PlayerId, Entity>);
@@ -51,9 +51,8 @@ fn handle_messages(
     me_query: Query<Entity, With<Me>>,
     mut commands: Commands,
     mut players: ResMut<Players>,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
     mut walk_events: EventWriter<WalkEvent>,
+    player_texture_atlas_handle: Res<PlayerTextureAtlasHandle>,
 ) {
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
@@ -104,27 +103,12 @@ fn handle_messages(
                                 position,
                                 direction
                             );
-                            let player = commands.spawn().id();
-                            let texture_handle = asset_server.load("player.png");
-                            let texture_atlas = TextureAtlas::from_grid(
-                                texture_handle,
-                                Vec2::new(19.0, 38.0),
-                                24,
-                                1,
+                            let player = insert_player(
+                                &mut commands,
+                                player_texture_atlas_handle.clone(),
+                                direction,
+                                position,
                             );
-                            let texture_atlas_handle = texture_atlases.add(texture_atlas);
-                            commands
-                                .entity(player)
-                                .insert_bundle(PlayerBundle {
-                                    sprite_sheet: SpriteSheetBundle {
-                                        texture_atlas: texture_atlas_handle,
-                                        ..Default::default()
-                                    },
-                                    walk_animation: WalkAnimation::new(),
-                                    ..Default::default()
-                                })
-                                .insert(direction)
-                                .insert(position);
                             players.0.insert(player_id, player);
                             walk_events.send(WalkEvent {
                                 player,

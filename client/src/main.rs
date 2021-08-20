@@ -1,21 +1,19 @@
-use bevy::{
-    input::{keyboard::KeyboardInput, ElementState},
-    prelude::*,
-    render::camera::WindowOrigin,
-};
+use bevy::{input::{keyboard::KeyboardInput, ElementState}, prelude::*, render::camera::WindowOrigin};
 
 use bevy_networking_turbulence::NetworkResource;
 use log::LevelFilter;
+use player::{Me, PlayerPlugin};
 use simple_logger::SimpleLogger;
 use std::convert::TryInto;
 
-use walk_animation::{WalkAnimation, walk_animation};
 use network::NetworkPlugin;
+use walk_animation::{walk_animation, WalkAnimation};
 
 mod network;
+mod player;
 mod walk_animation;
 
-use woods_common::{ClientMessage, Position, Direction};
+use woods_common::{ClientMessage, Direction, Position};
 
 struct WalkEvent {
     player: Entity,
@@ -80,12 +78,19 @@ fn main() {
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(NetworkPlugin)
-        .add_startup_system(setup_me.system())
+        .add_plugin(PlayerPlugin)
+        .add_startup_system(setup_camera.system())
         .add_system(keyboard_movement.system())
         .add_system(walk.system())
         .add_system(walk_animation.system())
         .add_event::<WalkEvent>()
         .run();
+}
+
+fn setup_camera(mut commands: Commands) {
+    let mut camera = OrthographicCameraBundle::new_2d();
+    camera.orthographic_projection.window_origin = WindowOrigin::BottomLeft;
+    commands.spawn_bundle(camera);
 }
 
 fn keyboard_movement(
@@ -142,50 +147,4 @@ fn walk(
             ));
         }
     }
-}
-
-struct Me;
-
-#[derive(Bundle)]
-struct PlayerBundle {
-    #[bundle]
-    sprite_sheet: SpriteSheetBundle,
-    direction: Direction,
-    walk_animation: WalkAnimation,
-}
-
-impl Default for PlayerBundle {
-    fn default() -> Self {
-        Self {
-            sprite_sheet: SpriteSheetBundle {
-                transform: Transform::from_xyz(10., 20., 0.),
-                ..Default::default()
-            },
-            direction: Direction::South,
-            walk_animation: Default::default(),
-        }
-    }
-}
-
-fn setup_me(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-) {
-    let texture_handle = asset_server.load("player.png");
-    let texture_atlas = TextureAtlas::from_grid(texture_handle, Vec2::new(19.0, 38.0), 24, 1);
-    let texture_atlas_handle = texture_atlases.add(texture_atlas);
-
-    let mut camera = OrthographicCameraBundle::new_2d();
-    camera.orthographic_projection.window_origin = WindowOrigin::BottomLeft;
-    commands.spawn_bundle(camera);
-    commands
-        .spawn_bundle(PlayerBundle {
-            sprite_sheet: SpriteSheetBundle {
-                texture_atlas: texture_atlas_handle,
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .insert(Me);
 }
