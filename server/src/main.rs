@@ -35,10 +35,10 @@ fn main() {
         .add_system_to_stage(CoreStage::PreUpdate, handle_messages.system())
         .add_system(handle_network_connections.system())
         .add_system(handle_connections.system())
-        .add_system_to_stage(CoreStage::PostUpdate, broadcast_moves.system())
-        .add_system_to_stage(CoreStage::PostUpdate, broadcast_turns.system())
+        .add_system(broadcast_moves.system())
         .insert_resource(PlayerIds::default())
         .add_event::<PlayerConnected>()
+        .add_event::<MoveEvent>()
         .run();
 }
 
@@ -120,37 +120,25 @@ fn handle_connections(
 
 fn handle_messages(
     mut net: ResMut<NetworkResource>,
-    mut commands: Commands,
     players: Res<PlayerIds>,
-    mut query: Query<(&Position, &Direction)>
+    mut move_events: EventWriter<MoveEvent>,
 ) {
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
         while let Some(client_message) = channels.recv::<ClientMessage>() {
-            log::debug!(
-                "ClientMessage received on [{}]: {:?}",
-                handle,
-                client_message
-            );
+            log::debug!("RECV [{}]: {:?}", handle, client_message);
             match client_message {
-                ClientMessage::Move(new_direction, new_position) => {
-
-                    let player = players
+                ClientMessage::Move(direction, position) => {
+                    let player = *players
                         .0
                         .get(&PlayerId(*handle))
                         .expect("no player with handle");
 
-                    if let Ok((_current_position, current_direction)) = query.get_mut(*player) {
-                        if *current_direction != new_direction {
-                            // Player is just turning
-                            commands.entity(*player).insert(new_direction);
-                        } else {
-                            // TODO: validate new position is adjacent to existing position
-                            commands.entity(*player).insert(new_position);
-                        }
-                    } else {
-                        log::warn!("Ignoring Move for player without direction/position");
-                    }
+                    move_events.send(MoveEvent {
+                        player,
+                        direction,
+                        position,
+                    });
                 }
                 ClientMessage::Hello => {
                     // Nothing to do -- the client just sends this to start the connection
@@ -161,29 +149,53 @@ fn handle_messages(
 }
 
 fn broadcast_moves(
+    mut commands: Commands,
+    mut query: Query<(&Position, &Direction, &PlayerId)>,
+    mut move_events: EventReader<MoveEvent>,
     mut net: ResMut<NetworkResource>,
-    query: Query<(&PlayerId, &Direction, &Position), Changed<Position>>,
 ) {
-    for (player_id, direction, position) in query.iter() {
-        net.broadcast_message(ServerMessage::Move {
-            player_id: *player_id,
-            direction: *direction,
-            position: *position,
-            distance: 1,
-        });
+    for move_event in move_events.iter() {
+        if let Ok((_current_position, current_direction, player_id)) =
+            query.get_mut(move_event.player)
+        {
+            let distance: u16;
+
+            if *current_direction != move_event.direction {
+                // Player is just turning
+                commands
+                    .entity(move_event.player)
+                    .insert(move_event.direction);
+                distance = 0;
+            } else {
+                // TODO: validate new position is adjacent to existing position
+                commands
+                    .entity(move_event.player)
+                    .insert(move_event.position);
+                distance = 1;
+            }
+
+            broadcast(
+                &mut net,
+                ServerMessage::Move {
+                    player_id: *player_id,
+                    direction: move_event.direction,
+                    position: move_event.position,
+                    distance,
+                },
+            );
+        } else {
+            log::warn!("Ignoring Move for player without direction/position");
+        }
     }
 }
 
-fn broadcast_turns(
-    mut net: ResMut<NetworkResource>,
-    query: Query<(&PlayerId, &Direction, &Position), Changed<Direction>>,
-) {
-    for (player_id, direction, position) in query.iter() {
-        net.broadcast_message(ServerMessage::Move {
-            player_id: *player_id,
-            direction: *direction,
-            position: *position,
-            distance: 0,
-        });
-    }
+struct MoveEvent {
+    direction: Direction,
+    position: Position,
+    player: Entity,
+}
+
+fn broadcast(net: &mut NetworkResource, message: ServerMessage) {
+    log::debug!("BROADCAST {:?}", message);
+    net.broadcast_message(message);
 }

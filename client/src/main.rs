@@ -64,7 +64,7 @@ impl WalkEvent {
 fn main() {
     SimpleLogger::new()
         .with_level(LevelFilter::Off)
-        .with_module_level("bevy_networking_turbulence", LevelFilter::Trace)
+        // .with_module_level("bevy_networking_turbulence", LevelFilter::Trace)
         .with_module_level("woods_client", LevelFilter::Trace)
         .init()
         .unwrap();
