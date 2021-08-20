@@ -9,15 +9,13 @@ use log::LevelFilter;
 use simple_logger::SimpleLogger;
 use std::convert::TryInto;
 
-use direction::Direction;
-use walk_animation::WalkAnimation;
+use walk_animation::{WalkAnimation, walk_animation};
 use network::NetworkPlugin;
 
-mod direction;
 mod network;
 mod walk_animation;
 
-use woods_common::{ClientMessage, Position};
+use woods_common::{ClientMessage, Position, Direction};
 
 struct WalkEvent {
     player: Entity,
@@ -143,25 +141,6 @@ fn walk(
                 walk_event.to,
             ));
         }
-    }
-}
-
-fn walk_animation(
-    time: Res<Time>,
-    mut query: Query<(
-        &mut TextureAtlasSprite,
-        &Direction,
-        &mut WalkAnimation,
-        &Position,
-        &mut Transform,
-    )>,
-) {
-    for (mut sprite, direction, mut walk_animation, position, mut transform) in query.iter_mut() {
-        walk_animation.tick(time.delta());
-
-        sprite.index = walk_animation.sprite_index_offset() + direction.sprite_index_offset();
-
-        transform.translation = walk_animation.translate(position, direction);
     }
 }
 

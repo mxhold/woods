@@ -1,3 +1,7 @@
+pub mod direction;
+
+pub use direction::Direction;
+
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
@@ -32,14 +36,6 @@ pub const SERVER_MESSAGE_SETTINGS: MessageChannelSettings = MessageChannelSettin
   message_buffer_size: 8,
   packet_buffer_size: 8,
 };
-
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Copy, Clone)]
-pub enum Direction {
-    North,
-    South,
-    East,
-    West,
-}
 
 #[derive(Hash, Serialize, Deserialize, Debug, Copy, Clone, Eq, PartialEq)]
 pub struct PlayerId(pub u32);

@@ -4,5 +4,6 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
+bevy = { version = "0.5.0", default-features = false, features = ["dynamic"] }
 bevy_networking_turbulence = { version = "0.3.3" }
 serde = { version = "1.0", features = ["derive"] }

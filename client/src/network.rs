@@ -6,10 +6,10 @@ use bevy_networking_turbulence::{
 };
 use woods_common::{
     ClientMessage, PlayerId, ServerMessage, CLIENT_MESSAGE_SETTINGS, SERVER_MESSAGE_SETTINGS,
-    SERVER_PORT,
+    SERVER_PORT
 };
 
-use crate::{direction::Direction, walk_animation::WalkAnimation, Me, PlayerBundle, WalkEvent};
+use crate::{walk_animation::WalkAnimation, Me, PlayerBundle, WalkEvent};
 
 #[derive(Default)]
 struct Players(pub HashMap<PlayerId, Entity>);
@@ -79,10 +79,6 @@ fn handle_messages(
                     position,
                     distance,
                 } => {
-                    // TODO: the fact that you can skip this line and not get a compiler error
-                    // makes me want to try to find some way to avoid setting components of unknown types!
-                    let direction: Direction = direction.into();
-
                     log::debug!("{:?} moved {:?} to {:?}", player_id, direction, position);
 
                     match players.0.get(&player_id) {
