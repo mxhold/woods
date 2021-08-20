@@ -78,7 +78,6 @@ pub fn insert_player(
                 texture_atlas: player_texture_atlas_handle.0,
                 ..Default::default()
             },
-            walk_animation: WalkAnimation::new(),
             ..Default::default()
         })
         .insert(direction)

@@ -11,6 +11,12 @@ pub enum Direction {
     West,
 }
 
+impl Default for Direction {
+    fn default() -> Self {
+        Direction::South
+    }
+}
+
 impl TryFrom<KeyCode> for Direction {
     type Error = &'static str;
 

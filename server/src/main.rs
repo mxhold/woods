@@ -42,17 +42,41 @@ fn handle_connections(
     mut net: ResMut<NetworkResource>,
     mut player_connected: EventReader<PlayerConnected>,
     mut commands: Commands,
+    query: Query<(&Position, &Direction, &PlayerId)>
 ) {
     for PlayerConnected(player_id, player) in player_connected.iter() {
+        let direction: Direction = Default::default();
         let position = random_position();
         commands
             .entity(*player)
             .insert(player_id.clone())
-            .insert(Direction::South)
+            .insert(direction)
             .insert(position);
 
         net.send_message(player_id.0, ServerMessage::Hello(*player_id, position))
             .expect("Hello failed");
+
+        for (other_player_position, other_player_direction, other_player_id) in query.iter() {
+            if other_player_id == player_id {
+                continue;
+            }
+
+            // Send new player position to all other players
+            net.send_message(other_player_id.0, ServerMessage::Move {
+                player_id: *player_id,
+                direction,
+                position,
+                distance: 0,
+            }).unwrap();
+
+            // Send positions of all previously connected players to new player
+            net.send_message(player_id.0, ServerMessage::Move {
+                player_id: *other_player_id,
+                direction: *other_player_direction,
+                position: *other_player_position,
+                distance: 0,
+            }).unwrap();
+        }
     }
 }
 
