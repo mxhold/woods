@@ -77,6 +77,7 @@ fn broadcast_moves(
                     distance = 0;
                 } else {
                     // TODO: validate new position is adjacent to existing position
+                    // TODO: collision detection
                     commands.entity(*player).insert(*position);
                     distance = 1;
                 }

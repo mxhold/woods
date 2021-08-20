@@ -123,12 +123,22 @@ fn keyboard_movement(
     }
 }
 
+#[derive(Default)]
+struct Collide;
+
 fn walk(
     mut walk_events: EventReader<WalkEvent>,
     mut net: ResMut<NetworkResource>,
     mut commands: Commands,
+    query: Query<(&Collide, &Position), Without<Me>>,
 ) {
     for walk_event in walk_events.iter() {
+        let collision = query.iter().any(|(_, position)| *position == walk_event.to);
+        if collision {
+            log::trace!("Ignoring move attempt due to collision");
+            continue;
+        }
+
         let mut entity_commands = commands.entity(walk_event.player);
 
         entity_commands

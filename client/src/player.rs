@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use woods_common::Position;
 
 use crate::walk_animation::WalkAnimation;
-use crate::Direction;
+use crate::{Collide, Direction};
 
 pub struct PlayerPlugin;
 
@@ -13,7 +13,6 @@ impl Plugin for PlayerPlugin {
             .add_startup_system(setup_me.system().after("load_sprite"));
     }
 }
-
 pub struct Me;
 
 #[derive(Bundle)]
@@ -22,6 +21,7 @@ struct PlayerBundle {
     sprite_sheet: SpriteSheetBundle,
     direction: Direction,
     walk_animation: WalkAnimation,
+    collide: Collide,
 }
 
 impl Default for PlayerBundle {
@@ -33,6 +33,7 @@ impl Default for PlayerBundle {
             },
             direction: Direction::South,
             walk_animation: Default::default(),
+            collide: Default::default(),
         }
     }
 }
