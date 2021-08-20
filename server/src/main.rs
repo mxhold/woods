@@ -3,9 +3,10 @@ use std::time::Duration;
 use bevy::{app::ScheduleRunnerSettings, prelude::*};
 use bevy_networking_turbulence::NetworkResource;
 use log::LevelFilter;
-use network::{NetworkPlugin, PlayerMessage};
+use network::{NetworkPlugin, PlayerConnected, PlayerMessage};
 use simple_logger::SimpleLogger;
 use woods_common::{ClientMessage, Direction, PlayerId, Position, ServerMessage};
+use rand::{thread_rng, Rng};
 
 mod network;
 
@@ -23,7 +24,36 @@ fn main() {
         .add_plugins(MinimalPlugins)
         .add_plugin(NetworkPlugin)
         .add_system(broadcast_moves.system())
+        .add_system(handle_connections.system())
+
         .run();
+}
+
+
+fn random_position() -> Position {
+    let mut rng = thread_rng();
+    let x: u16 = rng.gen_range(0..16);
+    let y: u16 = rng.gen_range(0..16);
+
+    Position { x, y }
+}
+
+fn handle_connections(
+    mut net: ResMut<NetworkResource>,
+    mut player_connected: EventReader<PlayerConnected>,
+    mut commands: Commands,
+) {
+    for PlayerConnected(player_id, player) in player_connected.iter() {
+        let position = random_position();
+        commands
+            .entity(*player)
+            .insert(player_id.clone())
+            .insert(Direction::South)
+            .insert(position);
+
+        net.send_message(player_id.0, ServerMessage::Hello(*player_id, position))
+            .expect("Hello failed");
+    }
 }
 
 fn broadcast_moves(

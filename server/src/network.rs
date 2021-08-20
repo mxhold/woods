@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
@@ -7,7 +6,7 @@ use bevy_networking_turbulence::{
     ConnectionChannelsBuilder, NetworkEvent, NetworkResource, NetworkingPlugin,
 };
 use woods_common::{
-    ClientMessage, Direction, PlayerId, Position, ServerMessage, CLIENT_MESSAGE_SETTINGS,
+    ClientMessage, PlayerId, ServerMessage, CLIENT_MESSAGE_SETTINGS,
     SERVER_MESSAGE_SETTINGS, SERVER_PORT,
 };
 
@@ -19,7 +18,6 @@ impl Plugin for NetworkPlugin {
             .add_startup_system(network_setup.system())
             .add_system_to_stage(CoreStage::PreUpdate, handle_messages.system())
             .add_system(handle_network_connections.system())
-            .add_system(handle_connections.system())
             .add_system(handle_messages.system())
             .insert_resource(PlayerIds::default())
             .add_event::<PlayerConnected>()
@@ -27,7 +25,7 @@ impl Plugin for NetworkPlugin {
     }
 }
 
-struct PlayerConnected(PlayerId);
+pub struct PlayerConnected(pub PlayerId, pub Entity);
 
 #[derive(Default)]
 struct PlayerIds(pub HashMap<PlayerId, Entity>);
@@ -57,7 +55,9 @@ fn network_setup(mut net: ResMut<NetworkResource>) {
 fn handle_network_connections(
     mut net: ResMut<NetworkResource>,
     mut network_events: EventReader<NetworkEvent>,
-    mut ev_player_connected: EventWriter<PlayerConnected>,
+    mut player_connected: EventWriter<PlayerConnected>,
+    mut commands: Commands,
+    mut players: ResMut<PlayerIds>,
 ) {
     for event in network_events.iter() {
         match event {
@@ -75,7 +75,10 @@ fn handle_network_connections(
                             log::debug!("Connected on [{}]", handle);
                         }
                     }
-                    ev_player_connected.send(PlayerConnected(PlayerId(*handle)));
+                    let player = commands.spawn().id();
+                    let player_id = PlayerId(*handle);
+                    players.0.insert(player_id, player);
+                    player_connected.send(PlayerConnected(player_id, player));
                 }
                 None => panic!("Got packet for non-existing connection [{}]", handle),
             },
@@ -84,34 +87,6 @@ fn handle_network_connections(
     }
 }
 
-fn random_position() -> Position {
-    let mut rng = thread_rng();
-    let x: u16 = rng.gen_range(0..16);
-    let y: u16 = rng.gen_range(0..16);
-
-    Position { x, y }
-}
-
-fn handle_connections(
-    mut net: ResMut<NetworkResource>,
-    mut ev_player_connected: EventReader<PlayerConnected>,
-    mut commands: Commands,
-    mut players: ResMut<PlayerIds>,
-) {
-    for PlayerConnected(player_id) in ev_player_connected.iter() {
-        let player = commands.spawn().id();
-        let position = random_position();
-        commands
-            .entity(player)
-            .insert(player_id.clone())
-            .insert(Direction::South)
-            .insert(position);
-        players.0.insert(*player_id, player);
-
-        net.send_message(player_id.0, ServerMessage::Hello(*player_id, position))
-            .expect("Hello failed");
-    }
-}
 
 fn handle_messages(
     mut net: ResMut<NetworkResource>,
