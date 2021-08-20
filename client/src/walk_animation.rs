@@ -84,28 +84,10 @@ impl WalkAnimation {
         }
     }
 
-    pub fn translate(&self, position: &Position, direction: &Direction) -> Vec3 {
-        let mut translation = Vec3::new(
-            (position.x as f32 * TILE_SIZE).into(),
-            (position.y as f32 * TILE_SIZE).into(),
-            0.0,
-        );
-        match direction {
-            Direction::East => {
-                translation.x -= self.stage.step_offset();
-            }
-            Direction::West => {
-                translation.x += self.stage.step_offset();
-            }
-            Direction::North => {
-                translation.y -= self.stage.step_offset();
-            }
-            Direction::South => {
-                translation.y += self.stage.step_offset();
-            }
-        }
+    pub fn translate(&self, position: &Position, direction: &Direction) -> Vec2 {
+        let position: Vec2 = (*position).into();
 
-        translation
+        (position * TILE_SIZE) - direction.translation() * self.stage.step_offset()
     }
 }
 
@@ -141,6 +123,6 @@ pub fn walk_animation(
 
         sprite.index = walk_animation.sprite_index_offset() + sprite_index_offset;
 
-        transform.translation = walk_animation.translate(position, direction);
+        transform.translation = walk_animation.translate(position, direction).extend(0.0);
     }
 }

@@ -1,5 +1,6 @@
 pub mod direction;
 
+use bevy::math::Vec2;
 pub use direction::Direction;
 
 use std::time::Duration;
@@ -44,6 +45,15 @@ pub struct PlayerId(pub u32);
 pub struct Position {
   pub x: u16,
   pub y: u16
+}
+
+impl From<Position> for Vec2 {
+    fn from(position: Position) -> Self {
+        Self::new(
+          position.x.into(),
+          position.y.into()
+        )
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
