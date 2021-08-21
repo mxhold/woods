@@ -96,7 +96,7 @@ fn setup_camera(mut commands: Commands) {
 
 fn keyboard_movement(
     mut keyboard_input_events: EventReader<KeyboardInput>,
-    mut query: Query<(Entity, &Me, &WalkAnimation, &Position, &Direction)>,
+    mut query: Query<(Entity, &WalkAnimation, &Position, &Direction), With<Me>>,
     mut walk_events: EventWriter<WalkEvent>,
 ) {
     for event in keyboard_input_events
@@ -105,7 +105,7 @@ fn keyboard_movement(
     {
         if let Some(key_code) = event.key_code {
             if let Ok(to_direction) = key_code.try_into() {
-                for (entity, _, walk_animation, position, direction) in query.iter_mut() {
+                for (entity, walk_animation, position, direction) in query.iter_mut() {
                     // Ignore keys until walk animation finishes
                     if walk_animation.running() {
                         continue;
@@ -153,8 +153,7 @@ fn walk(
         }
 
         if walk_event.me {
-            log::info!("Broadcasting move {:?}", walk_event.direction);
-            net.broadcast_message(ClientMessage::Move(
+            broadcast(&mut net, ClientMessage::Move(
                 walk_event.direction.into(),
                 walk_event.to,
             ));
@@ -162,11 +161,18 @@ fn walk(
     }
 }
 
+
+fn broadcast(net: &mut NetworkResource, message: ClientMessage) {
+    log::debug!("Broadcast: {:?}", message);
+    net.broadcast_message(message);
+}
+
 fn perspective(
     mut query: Query<(&mut Transform, &Position)>,
 ) {
     // Sprites should render top-to-bottom so things lower down overlap things higher up
     for (mut transform, position) in query.iter_mut() {
-        transform.translation.z = (1000 - position.y).into();
+        let far = 999; // camera is at 1000; see OrthographicCameraBundle
+        transform.translation.z = (far - position.y).into();
     }
 }

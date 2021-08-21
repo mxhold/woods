@@ -54,13 +54,12 @@ fn handle_messages(
     mut walk_events: EventWriter<WalkEvent>,
     player_texture_atlas_handle: Res<PlayerTextureAtlasHandle>,
 ) {
-    for (handle, connection) in net.connections.iter_mut() {
+    for (_, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
 
         while let Some(server_message) = channels.recv::<ServerMessage>() {
             log::debug!(
-                "ServerMessage received on [{}]: {:?}",
-                handle,
+                "Received: {:?}",
                 server_message
             );
 
@@ -68,7 +67,6 @@ fn handle_messages(
 
             match server_message {
                 ServerMessage::Hello(player_id, position) => {
-                    log::trace!("My id is {:?}. I'm at {:?}.", player_id, position);
                     commands.entity(me).insert(player_id).insert(position);
                     players.0.insert(player_id, me);
                 }
@@ -78,8 +76,6 @@ fn handle_messages(
                     position,
                     distance,
                 } => {
-                    log::debug!("{:?} moved {:?} to {:?}", player_id, direction, position);
-
                     match players.0.get(&player_id) {
                         Some(player) => {
                             if player.id() == me.id() {

@@ -96,7 +96,7 @@ fn handle_messages(
     for (handle, connection) in net.connections.iter_mut() {
         let channels = connection.channels().unwrap();
         while let Some(client_message) = channels.recv::<ClientMessage>() {
-            log::debug!("RECV [{}]: {:?}", handle, client_message);
+            log::debug!("Received [{}]: {:?}", handle, client_message);
 
             if let ClientMessage::Hello = client_message {
                 // Player won't exist yet; also this message is just to trigger the connection so nothing to do anyway.

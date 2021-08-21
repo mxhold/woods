@@ -53,8 +53,9 @@ fn handle_connections(
             .insert(direction)
             .insert(position);
 
+        log::debug!("Hello {:?} @ {:?}", player_id, position);
         net.send_message(player_id.0, ServerMessage::Hello(*player_id, position))
-            .expect("Hello failed");
+            .unwrap();
 
         for (other_player_position, other_player_direction, other_player_id) in query.iter() {
             if other_player_id == player_id {
@@ -123,6 +124,6 @@ fn broadcast_moves(
 }
 
 fn broadcast(net: &mut NetworkResource, message: ServerMessage) {
-    log::debug!("BROADCAST {:?}", message);
+    log::debug!("Broadcast: {:?}", message);
     net.broadcast_message(message);
 }
