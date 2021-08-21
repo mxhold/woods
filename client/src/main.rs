@@ -83,6 +83,7 @@ fn main() {
         .add_system(keyboard_movement.system())
         .add_system(walk.system())
         .add_system(walk_animation.system())
+        .add_system_to_stage(CoreStage::PostUpdate, perspective.system())
         .add_event::<WalkEvent>()
         .run();
 }
@@ -158,5 +159,14 @@ fn walk(
                 walk_event.to,
             ));
         }
+    }
+}
+
+fn perspective(
+    mut query: Query<(&mut Transform, &Position)>,
+) {
+    // Sprites should render top-to-bottom so things lower down overlap things higher up
+    for (mut transform, position) in query.iter_mut() {
+        transform.translation.z = (1000 - position.y).into();
     }
 }
