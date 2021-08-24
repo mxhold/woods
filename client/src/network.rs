@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy_spicy_networking::{
     AppNetworkClientMessage, ClientNetworkEvent, NetworkClient, NetworkData, NetworkSettings,
 };
-use woods_common::{MoveUpdate, PlayerId, Welcome, SERVER_PORT};
+use woods_common::{MoveUpdate, PlayerId, PlayerLeft, SERVER_PORT, Welcome};
 
 use crate::{
     player::{insert_player, PlayerTextureAtlasHandle},
@@ -24,10 +24,12 @@ impl Plugin for NetworkPlugin {
             .add_startup_system(setup_networking.system())
             .add_system(handle_network_events.system())
             .add_system(handle_welcome.system())
-            .add_system(handle_move_updates.system());
+            .add_system(handle_move_updates.system())
+            .add_system(handle_player_left.system());
 
         app.listen_for_client_message::<Welcome>();
         app.listen_for_client_message::<MoveUpdate>();
+        app.listen_for_client_message::<PlayerLeft>();
     }
 }
 
@@ -128,6 +130,20 @@ fn handle_network_events(
                 log::info!("Connected.");
             }
             _ => {}
+        }
+    }
+}
+
+fn handle_player_left(
+    mut player_left_events: EventReader<NetworkData<PlayerLeft>>,
+    mut commands: Commands,
+    mut players: ResMut<Players>,
+) {
+    for network_data in player_left_events.iter() {
+        let PlayerLeft(player_id) = **network_data;
+        if let Some(player) = players.0.remove(&player_id) {
+            commands.entity(player).despawn();
+            log::trace!("{:?} left.", player_id);
         }
     }
 }

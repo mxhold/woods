@@ -65,3 +65,13 @@ impl NetworkMessage for MoveUpdate {}
 impl ClientMessage for MoveUpdate {
   const NAME: &'static str = "woods:MoveInfo";
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PlayerLeft(pub PlayerId);
+
+#[typetag::serde]
+impl NetworkMessage for PlayerLeft {}
+
+impl ClientMessage for PlayerLeft {
+  const NAME: &'static str = "woods:PlayerLeft";
+}

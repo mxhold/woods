@@ -6,7 +6,7 @@ use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use woods_common::{Direction, MoveInput, MoveUpdate, PlayerId, Position, Welcome, SERVER_PORT};
+use woods_common::{Direction, MoveInput, MoveUpdate, PlayerId, PlayerLeft, Position, SERVER_PORT, Welcome};
 
 pub struct NetworkPlugin;
 
@@ -14,15 +14,16 @@ impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut AppBuilder) {
         app.add_plugin(bevy_spicy_networking::ServerPlugin)
             .add_startup_system(setup_networking.system())
-            .add_system_to_stage(CoreStage::PreUpdate, handle_messages.system())
+            .add_system_to_stage(CoreStage::PreUpdate, handle_moves.system())
             .add_system(handle_network_connections.system())
-            .insert_resource(Connections::default())
+            .add_system(handle_disconnects.system())
+            .insert_resource(Players::default())
             .listen_for_server_message::<MoveInput>();
     }
 }
 
 #[derive(Default)]
-struct Connections(pub HashMap<ConnectionId, Entity>);
+struct Players(pub HashMap<ConnectionId, Entity>);
 
 fn setup_networking(mut net: ResMut<NetworkServer>) {
     let ip_address = "127.0.0.1".parse().unwrap();
@@ -51,7 +52,7 @@ fn random_position() -> Position {
 fn handle_network_connections(
     mut commands: Commands,
     mut network_events: EventReader<ServerNetworkEvent>,
-    mut connections: ResMut<Connections>,
+    mut players: ResMut<Players>,
     net: Res<NetworkServer>,
     query: Query<(&Position, &Direction, &PlayerId, &ConnectionId)>,
     mut next_player_id: Local<u32>,
@@ -60,7 +61,7 @@ fn handle_network_connections(
         if let ServerNetworkEvent::Connected(connection_id) = event {
             log::debug!("New connection from {:?}", connection_id);
             let player = commands.spawn().id();
-            connections.0.insert(*connection_id, player);
+            players.0.insert(*connection_id, player);
             *next_player_id += 1;
             let player_id = PlayerId(*next_player_id);
             let direction: Direction = Default::default();
@@ -116,8 +117,35 @@ fn handle_network_connections(
     }
 }
 
-fn handle_messages(
-    connections: Res<Connections>,
+fn handle_disconnects(
+    mut players: ResMut<Players>,
+    mut network_events: EventReader<ServerNetworkEvent>,
+    query: Query<&PlayerId>,
+    mut commands: Commands,
+    net: Res<NetworkServer>,
+) {
+    for event in network_events.iter() {
+        if let ServerNetworkEvent::Disconnected(connection_id) = event {
+            if let Some(player) = players.0.remove(connection_id) {
+                match query.get(player) {
+                    Ok(player_id) => {
+                        log::info!("{:?} disconnected.", player_id);
+                        net.broadcast(PlayerLeft(*player_id));
+                    },
+                    Err(_) => {
+                        log::warn!("Disconnect for player without PlayerId {:?}", connection_id);
+                    },
+                }
+                commands.entity(player).despawn();
+            } else {
+                log::warn!("Disconnect for connection missing from connections {:?}", connection_id);
+            }
+        }
+    }
+}
+
+fn handle_moves(
+    players: Res<Players>,
     net: Res<NetworkServer>,
     mut move_inputs: EventReader<NetworkData<MoveInput>>,
     mut query: Query<(&Position, &Direction, &PlayerId)>,
@@ -126,7 +154,7 @@ fn handle_messages(
     for move_input in move_inputs.iter() {
         let MoveInput(direction, position) = **move_input;
 
-        let player = connections
+        let player = players
             .0
             .get(&move_input.source())
             .expect("No player associated with connection");
