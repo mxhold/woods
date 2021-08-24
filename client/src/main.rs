@@ -1,6 +1,6 @@
 use bevy::{input::{keyboard::KeyboardInput, ElementState}, prelude::*, render::camera::WindowOrigin};
 
-use bevy_networking_turbulence::NetworkResource;
+use bevy_spicy_networking::NetworkClient;
 use log::LevelFilter;
 use player::{Me, PlayerPlugin};
 use simple_logger::SimpleLogger;
@@ -13,7 +13,7 @@ mod network;
 mod player;
 mod walk_animation;
 
-use woods_common::{ClientMessage, Direction, Position};
+use woods_common::{Direction, MoveInput, Position};
 
 struct WalkEvent {
     player: Entity,
@@ -64,7 +64,6 @@ impl WalkEvent {
 fn main() {
     SimpleLogger::new()
         .with_level(LevelFilter::Off)
-        // .with_module_level("bevy_networking_turbulence", LevelFilter::Trace)
         .with_module_level("woods_client", LevelFilter::Trace)
         .init()
         .unwrap();
@@ -129,7 +128,7 @@ struct Collide;
 
 fn walk(
     mut walk_events: EventReader<WalkEvent>,
-    mut net: ResMut<NetworkResource>,
+    net: Res<NetworkClient>,
     mut commands: Commands,
     query: Query<(&Collide, &Position), Without<Me>>,
 ) {
@@ -153,18 +152,9 @@ fn walk(
         }
 
         if walk_event.me {
-            broadcast(&mut net, ClientMessage::Move(
-                walk_event.direction.into(),
-                walk_event.to,
-            ));
+            net.send_message(MoveInput(walk_event.direction, walk_event.to)).unwrap();
         }
     }
-}
-
-
-fn broadcast(net: &mut NetworkResource, message: ClientMessage) {
-    log::debug!("Broadcast: {:?}", message);
-    net.broadcast_message(message);
 }
 
 fn perspective(
