@@ -14,16 +14,13 @@ pub struct PlayerId(pub u32);
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
 pub struct Position {
-  pub x: u16,
-  pub y: u16
+    pub x: u16,
+    pub y: u16,
 }
 
 impl From<Position> for Vec2 {
     fn from(position: Position) -> Self {
-        Self::new(
-          position.x.into(),
-          position.y.into()
-        )
+        Self::new(position.x.into(), position.y.into())
     }
 }
 
@@ -36,7 +33,7 @@ pub struct MoveInput(pub Direction, pub Position);
 impl NetworkMessage for MoveInput {}
 
 impl ServerMessage for MoveInput {
-  const NAME: &'static str = "woods:MoveInput";
+    const NAME: &'static str = "woods:MoveInput";
 }
 
 // Server -> Client messages
@@ -48,7 +45,7 @@ pub struct Welcome(pub PlayerId, pub Position);
 impl NetworkMessage for Welcome {}
 
 impl ClientMessage for Welcome {
-  const NAME: &'static str = "woods:Welcome";
+    const NAME: &'static str = "woods:Welcome";
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -63,7 +60,7 @@ pub struct MoveUpdate {
 impl NetworkMessage for MoveUpdate {}
 
 impl ClientMessage for MoveUpdate {
-  const NAME: &'static str = "woods:MoveInfo";
+    const NAME: &'static str = "woods:MoveInfo";
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -73,5 +70,5 @@ pub struct PlayerLeft(pub PlayerId);
 impl NetworkMessage for PlayerLeft {}
 
 impl ClientMessage for PlayerLeft {
-  const NAME: &'static str = "woods:PlayerLeft";
+    const NAME: &'static str = "woods:PlayerLeft";
 }

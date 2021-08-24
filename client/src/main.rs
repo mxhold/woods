@@ -1,4 +1,8 @@
-use bevy::{input::{keyboard::KeyboardInput, ElementState}, prelude::*, render::camera::WindowOrigin};
+use bevy::{
+    input::{keyboard::KeyboardInput, ElementState},
+    prelude::*,
+    render::camera::WindowOrigin,
+};
 
 use bevy_spicy_networking::NetworkClient;
 use log::LevelFilter;
@@ -152,14 +156,13 @@ fn walk(
         }
 
         if walk_event.me {
-            net.send_message(MoveInput(walk_event.direction, walk_event.to)).unwrap();
+            net.send_message(MoveInput(walk_event.direction, walk_event.to))
+                .unwrap();
         }
     }
 }
 
-fn perspective(
-    mut query: Query<(&mut Transform, &Position)>,
-) {
+fn perspective(mut query: Query<(&mut Transform, &Position)>) {
     // Sprites should render top-to-bottom so things lower down overlap things higher up
     for (mut transform, position) in query.iter_mut() {
         let far = 999; // camera is at 1000; see OrthographicCameraBundle

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use woods_common::{Position, Direction};
 use std::time::Duration;
+use woods_common::{Direction, Position};
 
 const TILE_SIZE: f32 = 20.0;
 const STEP_DIST: f32 = TILE_SIZE / 3.0;
@@ -113,12 +113,12 @@ pub fn walk_animation(
     for (mut sprite, direction, mut walk_animation, position, mut transform) in query.iter_mut() {
         walk_animation.tick(time.delta());
 
-        let sprite_index_offset = 
-            match direction {
-                Direction::North => FRAMES_PER_DIRECTION * 0,
-                Direction::South => FRAMES_PER_DIRECTION * 1,
-                Direction::East => FRAMES_PER_DIRECTION * 2,
-                Direction::West => FRAMES_PER_DIRECTION * 3,
+        let sprite_index_offset = FRAMES_PER_DIRECTION
+            * match direction {
+                Direction::North => 0,
+                Direction::South => 1,
+                Direction::East => 2,
+                Direction::West => 3,
             };
 
         sprite.index = walk_animation.sprite_index_offset() + sprite_index_offset;

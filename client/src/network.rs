@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy_spicy_networking::{
     AppNetworkClientMessage, ClientNetworkEvent, NetworkClient, NetworkData, NetworkSettings,
 };
-use woods_common::{MoveUpdate, PlayerId, PlayerLeft, SERVER_PORT, Welcome};
+use woods_common::{MoveUpdate, PlayerId, PlayerLeft, Welcome, SERVER_PORT};
 
 use crate::{
     player::{insert_player, PlayerTextureAtlasHandle},
@@ -121,9 +121,7 @@ fn handle_move_updates(
     }
 }
 
-fn handle_network_events(
-    mut network_events: EventReader<ClientNetworkEvent>,
-) {
+fn handle_network_events(mut network_events: EventReader<ClientNetworkEvent>) {
     for event in network_events.iter() {
         match event {
             ClientNetworkEvent::Connected => {

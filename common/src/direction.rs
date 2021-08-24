@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
-use std::convert::TryFrom;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Copy, Clone)]
 pub enum Direction {
@@ -34,18 +34,10 @@ impl TryFrom<KeyCode> for Direction {
 impl Direction {
     pub fn translation(&self) -> Vec2 {
         match self {
-            Direction::East => {
-                Vec2::new(1.0, 0.0)
-            }
-            Direction::West => {
-                Vec2::new(-1.0, 0.0)
-            }
-            Direction::North => {
-                Vec2::new(0.0, 1.0)
-            }
-            Direction::South => {
-                Vec2::new(0.0, -1.0)
-            }
+            Direction::East => Vec2::new(1.0, 0.0),
+            Direction::West => Vec2::new(-1.0, 0.0),
+            Direction::North => Vec2::new(0.0, 1.0),
+            Direction::South => Vec2::new(0.0, -1.0),
         }
     }
 }

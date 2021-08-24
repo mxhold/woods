@@ -6,7 +6,9 @@ use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-use woods_common::{Direction, MoveInput, MoveUpdate, PlayerId, PlayerLeft, Position, SERVER_PORT, Welcome};
+use woods_common::{
+    Direction, MoveInput, MoveUpdate, PlayerId, PlayerLeft, Position, Welcome, SERVER_PORT,
+};
 
 pub struct NetworkPlugin;
 
@@ -131,14 +133,17 @@ fn handle_disconnects(
                     Ok(player_id) => {
                         log::info!("{:?} disconnected.", player_id);
                         net.broadcast(PlayerLeft(*player_id));
-                    },
+                    }
                     Err(_) => {
                         log::warn!("Disconnect for player without PlayerId {:?}", connection_id);
-                    },
+                    }
                 }
                 commands.entity(player).despawn();
             } else {
-                log::warn!("Disconnect for connection missing from connections {:?}", connection_id);
+                log::warn!(
+                    "Disconnect for connection missing from connections {:?}",
+                    connection_id
+                );
             }
         }
     }
@@ -173,11 +178,17 @@ fn handle_moves(
                 distance = 1;
             }
 
-            log::trace!("{:?} moved {:?} {:?} to {:?}", player_id, direction, distance, position);
+            log::trace!(
+                "{:?} moved {:?} {:?} to {:?}",
+                player_id,
+                direction,
+                distance,
+                position
+            );
             net.broadcast(MoveUpdate {
                 player_id: *player_id,
-                direction: direction,
-                position: position,
+                direction,
+                position,
                 distance,
             })
         } else {
