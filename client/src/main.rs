@@ -35,7 +35,12 @@ impl WalkEvent {
         direction: Direction,
         from: Position,
     ) -> Self {
-        let distance = Self::distance(previous_direction, direction);
+        let distance = if previous_direction == direction {
+            1
+        } else {
+            // Turning (i.e. changing directions) requires its own keydown
+            0
+        };
         let translation = direction.translation() * distance as f32;
         let to = Position {
             x: (translation.x + from.x as f32) as u16,
@@ -48,15 +53,6 @@ impl WalkEvent {
             direction,
             to,
             distance,
-        }
-    }
-
-    fn distance(previous_direction: Direction, direction: Direction) -> u16 {
-        if previous_direction == direction {
-            1
-        } else {
-            // Turning (i.e. changing directions) requires its own keydown
-            0
         }
     }
 
@@ -75,17 +71,19 @@ fn main() {
     App::build()
         .insert_resource(WindowDescriptor {
             title: "Woods".to_string(),
-            width: 400.0,
-            height: 300.0,
+            width: 500.0,
+            height: 375.0,
             ..Default::default()
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(NetworkPlugin)
         .add_plugin(PlayerPlugin)
         .add_startup_system(setup_camera.system())
+        .add_startup_system(setup_background.system())
         .add_system(keyboard_movement.system())
         .add_system(walk.system())
         .add_system(walk_animation.system())
+        .add_system(create_offset_parent.system())
         .add_system_to_stage(CoreStage::PostUpdate, perspective.system())
         .add_event::<WalkEvent>()
         .run();
@@ -94,7 +92,44 @@ fn main() {
 fn setup_camera(mut commands: Commands) {
     let mut camera = OrthographicCameraBundle::new_2d();
     camera.orthographic_projection.window_origin = WindowOrigin::BottomLeft;
+    let scale = 0.8;
+    camera.orthographic_projection.far = 1000.0 / scale;
+    camera.orthographic_projection.scale = scale;
+
     commands.spawn_bundle(camera);
+}
+
+fn setup_background(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let texture_handle = asset_server.load("tiles.png");
+    let sprite_bundle = SpriteBundle {
+        material: materials.add(texture_handle.into()),
+        ..Default::default()
+    };
+    commands
+        .spawn_bundle(sprite_bundle)
+        .insert(TransformOffset(Transform::from_translation(Vec3::new(
+            200.0, 150.0, 0.0,
+        ))));
+}
+
+struct TransformOffset(pub Transform);
+
+fn create_offset_parent(
+    mut commands: Commands,
+    mut query: Query<(Entity, &TransformOffset), Without<Parent>>,
+) {
+    for (entity, transform_offset) in query.iter_mut() {
+        commands
+            .spawn()
+            .insert(transform_offset.0)
+            .insert(GlobalTransform::default())
+            .push_children(&[entity])
+            .id();
+    }
 }
 
 fn keyboard_movement(

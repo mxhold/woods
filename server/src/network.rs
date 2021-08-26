@@ -45,10 +45,10 @@ fn setup_networking(mut net: ResMut<NetworkServer>) {
 
 fn random_position() -> Position {
     let mut rng = thread_rng();
-    let x: u16 = rng.gen_range(0..16);
-    let y: u16 = rng.gen_range(0..16);
+    let x: u16 = rng.gen_range(0..8);
+    let y: u16 = rng.gen_range(0..8);
 
-    Position { x, y }
+    Position { x: 0, y: 0 }
 }
 
 fn handle_network_connections(

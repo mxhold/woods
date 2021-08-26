@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use woods_common::Position;
 
 use crate::walk_animation::WalkAnimation;
-use crate::{Collide, Direction};
+use crate::{Collide, Direction, TransformOffset};
 
 pub struct PlayerPlugin;
 
@@ -22,18 +22,17 @@ struct PlayerBundle {
     direction: Direction,
     walk_animation: WalkAnimation,
     collide: Collide,
+    transform_offset: TransformOffset,
 }
 
 impl Default for PlayerBundle {
     fn default() -> Self {
         Self {
-            sprite_sheet: SpriteSheetBundle {
-                transform: Transform::from_xyz(10., 20., 0.),
-                ..Default::default()
-            },
+            sprite_sheet: SpriteSheetBundle::default(),
             direction: Direction::South,
             walk_animation: Default::default(),
             collide: Default::default(),
+            transform_offset: TransformOffset(Transform::from_translation(Vec3::new(19.0 / 2.0, 38.0 / 2.0, 0.0))),
         }
     }
 }
