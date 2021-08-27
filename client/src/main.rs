@@ -1,7 +1,7 @@
 use bevy::{
     input::{keyboard::KeyboardInput, ElementState},
     prelude::*,
-    render::camera::WindowOrigin,
+    render::camera::{Camera, WindowOrigin},
 };
 
 use bevy_spicy_networking::NetworkClient;
@@ -61,6 +61,9 @@ impl WalkEvent {
     }
 }
 
+const SCREEN_WIDTH: f32 = 600.0;
+const SCREEN_HEIGHT: f32 = 400.0;
+
 fn main() {
     SimpleLogger::new()
         .with_level(LevelFilter::Off)
@@ -71,8 +74,8 @@ fn main() {
     App::build()
         .insert_resource(WindowDescriptor {
             title: "Woods".to_string(),
-            width: 500.0,
-            height: 375.0,
+            width: SCREEN_WIDTH,
+            height: SCREEN_HEIGHT,
             ..Default::default()
         })
         .add_plugins(DefaultPlugins)
@@ -84,6 +87,7 @@ fn main() {
         .add_system(walk.system())
         .add_system(walk_animation.system())
         .add_system(create_offset_parent.system())
+        .add_system(camera_movement.system())
         .add_system_to_stage(CoreStage::PostUpdate, perspective.system())
         .add_event::<WalkEvent>()
         .run();
@@ -92,19 +96,18 @@ fn main() {
 fn setup_camera(mut commands: Commands) {
     let mut camera = OrthographicCameraBundle::new_2d();
     camera.orthographic_projection.window_origin = WindowOrigin::BottomLeft;
-    let scale = 0.8;
-    camera.orthographic_projection.far = 1000.0 / scale;
-    camera.orthographic_projection.scale = scale;
-
     commands.spawn_bundle(camera);
 }
+
+const MAP_WIDTH: f32 = 1000.0;
+const MAP_HEIGHT: f32 = 1000.0;
 
 fn setup_background(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    let texture_handle = asset_server.load("tiles.png");
+    let texture_handle = asset_server.load("field.png");
     let sprite_bundle = SpriteBundle {
         material: materials.add(texture_handle.into()),
         ..Default::default()
@@ -112,7 +115,9 @@ fn setup_background(
     commands
         .spawn_bundle(sprite_bundle)
         .insert(TransformOffset(Transform::from_translation(Vec3::new(
-            200.0, 150.0, 0.0,
+            MAP_WIDTH / 2.0,
+            MAP_HEIGHT / 2.0,
+            0.0,
         ))));
 }
 
@@ -159,6 +164,33 @@ fn keyboard_movement(
                 }
             }
         }
+    }
+}
+
+fn camera_movement(
+    mut commands: Commands,
+    me_query: Query<&Transform, (With<Me>, Changed<Transform>)>,
+    camera_query: Query<Entity, With<Camera>>,
+) {
+    if let Ok(transform) = me_query.single() {
+        let camera = camera_query.single().unwrap();
+
+        let mut camera_transform = Transform::from_translation(
+            transform.translation - Vec3::new(SCREEN_WIDTH / 2.0, SCREEN_HEIGHT / 2.0, 0.0),
+        );
+
+        camera_transform.translation.x = camera_transform
+            .translation
+            .x
+            .clamp(0.0, MAP_WIDTH - SCREEN_WIDTH);
+        camera_transform.translation.y = camera_transform
+            .translation
+            .y
+            .clamp(0.0, MAP_HEIGHT - SCREEN_HEIGHT);
+
+        camera_transform.translation.z = 999.0;
+
+        commands.entity(camera).insert(camera_transform);
     }
 }
 
