@@ -85,9 +85,9 @@ fn main() {
         .add_startup_system(setup_background.system())
         .add_system(keyboard_movement.system())
         .add_system(walk.system())
-        .add_system(walk_animation.system())
         .add_system(create_offset_parent.system())
-        .add_system(camera_movement.system())
+        .add_system(walk_animation.system().label("walk_animation"))
+        .add_system(camera_movement.system().after("walk_animation"))
         .add_system_to_stage(CoreStage::PostUpdate, perspective.system())
         .add_event::<WalkEvent>()
         .run();
